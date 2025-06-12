@@ -1,0 +1,119 @@
+import { query } from "./_generated/server";
+import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
+
+// 月次カレンダーデータを取得
+export const getMonthlyCalendar = query({
+  args: {
+    year: v.number(),
+    month: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("認証が必要です");
+    }
+
+    const startOfMonth = new Date(args.year, args.month - 1, 1).getTime();
+    const endOfMonth = new Date(args.year, args.month, 0, 23, 59, 59, 999).getTime();
+
+    // スタッフ一覧を取得
+    const staffList = await ctx.db
+      .query("staff")
+      .withIndex("by_created_by", (q) => q.eq("createdBy", userId))
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+
+    // 月次勤怠データを取得
+    const attendanceRecords = await ctx.db
+      .query("attendance")
+      .withIndex("by_date", (q) => 
+        q.gte("timestamp", startOfMonth).lte("timestamp", endOfMonth)
+      )
+      .filter((q) => q.eq(q.field("createdBy"), userId))
+      .collect();
+
+    // 日付ごとのデータを生成
+    const dailyData: Record<string, { attendanceCount: number; staffList: any[] }> = {};
+    let totalWorkDays = 0;
+    let totalAttendanceCount = 0;
+    let maxAttendance = 0;
+
+    // 出勤・退勤記録を分離
+    const clockInRecords = attendanceRecords.filter(record => record.type === "clock_in");
+    const clockOutRecords = attendanceRecords.filter(record => record.type === "clock_out");
+
+    // 退勤記録をマップ化
+    const clockOutMap = new Map<string, any>();
+    clockOutRecords.forEach(record => {
+      const date = new Date(record.timestamp);
+      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const key = `${record.staffId}-${dateKey}`;
+      clockOutMap.set(key, record);
+    });
+
+    // 日付ごとにグループ化
+    const recordsByDate = new Map<string, any[]>();
+    clockInRecords.forEach(record => {
+      const date = new Date(record.timestamp);
+      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      
+      if (!recordsByDate.has(dateKey)) {
+        recordsByDate.set(dateKey, []);
+      }
+      recordsByDate.get(dateKey)!.push(record);
+    });
+
+    // 各日のデータを処理
+    for (const [dateKey, records] of recordsByDate.entries()) {
+      const attendingStaff = [];
+      
+      for (const record of records) {
+        const staff = staffList.find(s => s._id === record.staffId);
+        if (staff) {
+          // 対応する退勤記録を探す
+          const clockOutKey = `${record.staffId}-${dateKey}`;
+          const clockOutRecord = clockOutMap.get(clockOutKey);
+          
+          attendingStaff.push({
+            staffId: staff._id,
+            name: staff.name,
+            employeeId: staff.employeeId,
+            clockIn: {
+              timestamp: record.timestamp,
+              status: record.status || "on_time",
+            },
+            clockOut: clockOutRecord ? {
+              timestamp: clockOutRecord.timestamp,
+              status: clockOutRecord.status || "on_time",
+            } : null,
+          });
+        }
+      }
+
+      if (attendingStaff.length > 0) {
+        dailyData[dateKey] = {
+          attendanceCount: attendingStaff.length,
+          staffList: attendingStaff.sort((a, b) => a.clockIn.timestamp - b.clockIn.timestamp),
+        };
+
+        totalWorkDays++;
+        totalAttendanceCount += attendingStaff.length;
+        maxAttendance = Math.max(maxAttendance, attendingStaff.length);
+      }
+    }
+
+    const averageAttendance = totalWorkDays > 0 
+      ? Math.round((totalAttendanceCount / totalWorkDays) * 10) / 10 
+      : 0;
+
+    return {
+      dailyData,
+      summary: {
+        totalWorkDays,
+        averageAttendance,
+        maxAttendance,
+      },
+    };
+  },
+});
