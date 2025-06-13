@@ -14,8 +14,9 @@ export const getMonthlyCalendar = query({
       throw new Error("認証が必要です");
     }
 
-    const startOfMonth = new Date(args.year, args.month - 1, 1).getTime();
-    const endOfMonth = new Date(args.year, args.month, 0, 23, 59, 59, 999).getTime();
+    // 月の範囲を計算（JST基準）
+    const startOfMonth = new Date(`${args.year}-${String(args.month).padStart(2, '0')}-01T00:00:00+09:00`).getTime();
+    const endOfMonth = new Date(`${args.year}-${String(args.month).padStart(2, '0')}-${new Date(args.year, args.month, 0).getDate()}T23:59:59+09:00`).getTime();
 
     // スタッフ一覧を取得
     const staffList = await ctx.db
@@ -115,5 +116,28 @@ export const getMonthlyCalendar = query({
         maxAttendance,
       },
     };
+  },
+});
+
+export const getMonthlyAttendanceStatus = query({
+  args: {
+    startOfMonth: v.number(), // UTCタイムスタンプ
+    endOfMonth: v.number(),   // UTCタイムスタンプ
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("認証が必要です");
+    }
+
+    const attendanceRecords = await ctx.db
+      .query("attendance")
+      .withIndex("by_date", (q) =>
+        q.gte("timestamp", args.startOfMonth).lte("timestamp", args.endOfMonth)
+      )
+      .filter((q) => q.eq(q.field("createdBy"), userId))
+      .collect();
+      
+    return attendanceRecords;
   },
 });

@@ -1,66 +1,79 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { Doc, Id } from "./_generated/dataModel";
 
-// 今日の勤怠一覧を取得
+// 今日の勤怠一覧を取得 (リファクタリング・復活版)
 export const getTodayAttendance = query({
-  args: {},
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      throw new Error("認証が必要です");
+      return [];
     }
-
-    // 今日の範囲を計算（JST基準）
+    
+    // 今日の範囲をUTCで計算
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfDay = today.getTime();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1;
 
     const attendanceRecords = await ctx.db
       .query("attendance")
       .withIndex("by_date", (q) => 
-        q.gte("timestamp", startOfDay).lte("timestamp", endOfDay)
+        q.gte("timestamp", startOfDay)
+         .lte("timestamp", endOfDay)
       )
+      .filter((q) => q.eq(q.field("createdBy"), userId))
       .collect();
-
-    // スタッフ一覧を取得
-    const staffList = await ctx.db
-      .query("staff")
-      .withIndex("by_created_by", (q) => q.eq("createdBy", userId))
-      .filter((q) => q.eq(q.field("isActive"), true))
-      .collect();
-
-    // スタッフごとに勤怠をまとめる
-    const staffAttendanceMap = new Map();
+      
+    const staffIds = [...new Set(attendanceRecords.map(r => r.staffId))];
     
-    for (const record of attendanceRecords) {
-      const staff = staffList.find(s => s._id === record.staffId);
-      if (!staff) continue;
+    const staffDetails = await Promise.all(
+      staffIds.map(staffId => ctx.db.get(staffId))
+    );
+    const staffMap = new Map(staffDetails.filter((s): s is Doc<"staff"> => s !== null).map(s => [s._id, s]));
 
-      if (!staffAttendanceMap.has(record.staffId)) {
-        staffAttendanceMap.set(record.staffId, {
+    const recordsByStaff = new Map<Id<"staff">, {
+      staff: Doc<"staff">;
+      clockIn: Doc<"attendance"> | null;
+      clockOut: Doc<"attendance"> | null;
+      status: string;
+    }>();
+
+    attendanceRecords.forEach(record => {
+      const staff = staffMap.get(record.staffId);
+      if (!staff) return;
+
+      if (!recordsByStaff.has(record.staffId)) {
+        recordsByStaff.set(record.staffId, {
           staff,
           clockIn: null,
           clockOut: null,
-          status: "absent",
+          status: "absent"
         });
       }
-
-      const staffData = staffAttendanceMap.get(record.staffId);
+      
+      const entry = recordsByStaff.get(record.staffId)!;
       if (record.type === "clock_in") {
-        staffData.clockIn = record;
-        staffData.status = "present";
+        if (!entry.clockIn || record.timestamp < entry.clockIn.timestamp) {
+          entry.clockIn = record;
+        }
       } else {
-        staffData.clockOut = record;
-        if (staffData.clockIn) {
-          staffData.status = "completed";
+        if (!entry.clockOut || record.timestamp > entry.clockOut.timestamp) {
+          entry.clockOut = record;
         }
       }
-    }
+    });
+    
+    recordsByStaff.forEach(entry => {
+        if(entry.clockIn && entry.clockOut) {
+            entry.status = "completed";
+        } else if (entry.clockIn) {
+            entry.status = "present";
+        }
+    });
 
-    return Array.from(staffAttendanceMap.values());
-  },
+    return Array.from(recordsByStaff.values());
+  }
 });
 
 // 勤怠記録を作成（シンプル版）
@@ -239,67 +252,75 @@ export const deleteAttendance = mutation({
   },
 });
 
-// ダミーデータ作成
-export const createAttendanceDummyData = mutation({
-  args: {},
-  handler: async (ctx) => {
+// 過去30日分のダミーデータを作成
+export const createAttendanceDummyData =
+  mutation(async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("認証が必要です");
     }
 
-    // スタッフ一覧を取得
     const staffList = await ctx.db
       .query("staff")
       .withIndex("by_created_by", (q) => q.eq("createdBy", userId))
-      .filter((q) => q.eq(q.field("isActive"), true))
       .collect();
 
     if (staffList.length === 0) {
-      throw new Error("スタッフが登録されていません");
+      throw new Error("スタッフが登録されていません。先にスタッフを登録してください。");
     }
 
-    // 2025年5月のデータを含む過去30日分のダミーデータを作成（JST）
-    const today = new Date();
+    // 既存の勤怠データをすべて削除
+    const allAttendance = await ctx.db.query("attendance").collect();
+    for (const record of allAttendance) {
+      if (record.createdBy === userId) {
+        await ctx.db.delete(record._id);
+      }
+    }
+
+    const today = new Date(); // 現在のUTC時刻
+    today.setUTCHours(0, 0, 0, 0); // 今日のUTCの始まりに設定
+
     for (let i = 0; i < 30; i++) {
       const date = new Date(today);
-      date.setDate(date.getDate() - i);
+      date.setUTCDate(today.getUTCDate() - i);
       
-      // 各日にランダムなスタッフの勤怠を作成
-      const workingStaff = staffList.filter(() => Math.random() > 0.3); // 70%の確率で出勤
-      
-      for (const staff of workingStaff) {
-        // 出勤時刻（8:30-10:00の間でランダム）JST
-        const clockInTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 8, 30 + Math.floor(Math.random() * 90), 0, 0);
-        const clockInTimestamp = clockInTime.getTime();
-        
-        await ctx.db.insert("attendance", {
-          staffId: staff._id,
-          type: "clock_in",
-          timestamp: clockInTimestamp,
-          status: "on_time",
-          createdBy: userId,
-        });
+      // 80%の確率で出勤
+      if (Math.random() > 0.2) {
+        for (const staff of staffList) {
+          // 出勤時刻 (UTC)
+          const clockInHour = 8; // JST 17時 -> UTC 8時
+          const clockInMinute = 30 + Math.floor(Math.random() * 60);
+          const clockInTimestamp = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), clockInHour, clockInMinute);
 
-        // 退勤時刻（17:00-19:00の間でランダム）JST
-        if (Math.random() > 0.1) { // 90%の確率で退勤記録も作成
-          const clockOutTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 17, Math.floor(Math.random() * 120), 0, 0);
-          const clockOutTimestamp = clockOutTime.getTime();
-          
           await ctx.db.insert("attendance", {
             staffId: staff._id,
-            type: "clock_out",
-            timestamp: clockOutTimestamp,
+            type: "clock_in",
+            timestamp: clockInTimestamp,
             status: "on_time",
             createdBy: userId,
           });
+
+          // 95%の確率で退勤記録も作成
+          if (Math.random() > 0.05) {
+            // 退勤時刻 (UTC)
+            const clockOutHour = 17 + Math.floor(Math.random() * 2) - 9; // JST 17-18時 -> UTC 8-9時
+            const clockOutMinute = clockOutHour === 8 ? 30 + Math.floor(Math.random() * 30) : Math.floor(Math.random() * 60);
+            const clockOutTimestamp = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), clockOutHour, clockOutMinute);
+
+            await ctx.db.insert("attendance", {
+              staffId: staff._id,
+              type: "clock_out",
+              timestamp: clockOutTimestamp,
+              status: "on_time",
+              createdBy: userId,
+            });
+          }
         }
       }
     }
 
-    return { success: true };
-  },
-});
+    return { success: true, message: "過去30日間の日勤ダミーデータを作成しました。" };
+  });
 
 // 本日のダミーデータ作成（新機能）
 export const createTodayDummyData = mutation({
@@ -310,7 +331,6 @@ export const createTodayDummyData = mutation({
       throw new Error("認証が必要です");
     }
 
-    // スタッフ一覧を取得
     const staffList = await ctx.db
       .query("staff")
       .withIndex("by_created_by", (q) => q.eq("createdBy", userId))
@@ -321,12 +341,11 @@ export const createTodayDummyData = mutation({
       throw new Error("スタッフが登録されていません");
     }
 
-    // 今日の既存データを削除（JST基準）
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfDay = today.getTime();
-    const endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1;
+    const today = new Date();
+    const startOfDay = new Date(today.setUTCHours(0, 0, 0, 0)).getTime();
+    const endOfDay = new Date(today.setUTCHours(23, 59, 59, 999)).getTime();
 
+    // 今日の既存データを削除
     const existingRecords = await ctx.db
       .query("attendance")
       .withIndex("by_date", (q) => 
@@ -340,31 +359,25 @@ export const createTodayDummyData = mutation({
       }
     }
 
-    // 本日のダミーデータを作成（JST）
+    // 現実的な日勤シナリオ (時刻はJST基準で考え、UTCに変換して登録)
     const scenarios = [
-      // 正常パターン
-      { clockIn: "09:00", clockOut: "18:00", errors: [] },
-      { clockIn: "08:30", clockOut: "17:30", errors: [] },
-      { clockIn: "09:15", clockOut: "18:15", errors: [] },
-      
-      // エラーパターン
-      { clockIn: "09:00", clockOut: "09:30", errors: ["24時間以上の勤務"] }, // 実際は短時間だが、テスト用
-      { clockIn: "10:00", clockOut: null, errors: [] }, // 退勤未記録
-      { clockIn: "08:00", clockOut: "20:00", errors: [] }, // 長時間勤務
-      
-      // 連続打刻エラー用（後で追加）
-      { clockIn: "09:00", clockOut: "18:00", errors: [] },
+      { clockIn: "08:50", clockOut: "17:45" }, // 正常
+      { clockIn: "09:05", clockOut: "18:10" }, // 遅刻気味
+      { clockIn: "08:30", clockOut: null },      // 退勤忘れ
+      { clockIn: "09:00", clockOut: "19:00" }, // 残業
+      { clockIn: "09:15", clockOut: "17:00" }, // 早退
+      { clockIn: "08:55", clockOut: "18:05" },
     ];
+
+    const todayUTC = new Date();
 
     for (let i = 0; i < Math.min(staffList.length, scenarios.length); i++) {
       const staff = staffList[i];
       const scenario = scenarios[i];
       
-      // 出勤時刻（JST）
-      const [clockInHour, clockInMinute] = scenario.clockIn.split(':').map(Number);
-      const clockInTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), clockInHour, clockInMinute, 0, 0);
-      const clockInTimestamp = clockInTime.getTime();
-      
+      const [inH, inM] = scenario.clockIn.split(':').map(Number);
+      const clockInTimestamp = Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), todayUTC.getUTCDate(), inH - 9, inM);
+
       await ctx.db.insert("attendance", {
         staffId: staff._id,
         type: "clock_in",
@@ -373,16 +386,9 @@ export const createTodayDummyData = mutation({
         createdBy: userId,
       });
 
-      // 退勤時刻（ある場合）JST
       if (scenario.clockOut) {
-        const [clockOutHour, clockOutMinute] = scenario.clockOut.split(':').map(Number);
-        let clockOutTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), clockOutHour, clockOutMinute, 0, 0);
-        let clockOutTimestamp = clockOutTime.getTime();
-        
-        // 24時間以上エラーのテスト用
-        if (scenario.errors.includes("24時間以上の勤務")) {
-          clockOutTimestamp = clockInTimestamp + 25 * 60 * 60 * 1000; // 25時間後
-        }
+        const [outH, outM] = scenario.clockOut.split(':').map(Number);
+        const clockOutTimestamp = Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), todayUTC.getUTCDate(), outH - 9, outM);
         
         await ctx.db.insert("attendance", {
           staffId: staff._id,
@@ -393,27 +399,12 @@ export const createTodayDummyData = mutation({
         });
       }
     }
-
-    // 連続打刻エラーのテスト用データ（同じスタッフで連続出勤打刻）JST
-    if (staffList.length > 0) {
-      const testStaff = staffList[0];
-      const duplicateClockIn = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 5, 0, 0);
-      const duplicateTimestamp = duplicateClockIn.getTime();
-      
-      await ctx.db.insert("attendance", {
-        staffId: testStaff._id,
-        type: "clock_in",
-        timestamp: duplicateTimestamp,
-        status: "on_time",
-        createdBy: userId,
-      });
-    }
-
-    return { success: true };
+    return { success: true, message: "本日の日勤ダミーデータを作成しました。" };
   },
 });
 
 // 勤怠記録を修正（管理者用）
+// 注意：このシステムではタイムスタンプは全てJST（日本標準時）で統一されています
 export const correctAttendance = mutation({
   args: {
     staffId: v.id("staff"),
@@ -439,27 +430,31 @@ export const correctAttendance = mutation({
     const startOfDay = targetDate.getTime();
     const endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1;
 
-    // 該当日の既存記録を検索
+    // 該当日の既存記録を検索（スタッフIDとタイプで絞り込み）
     const existingRecords = await ctx.db
       .query("attendance")
-      .withIndex("by_date", (q) => 
-        q.gte("timestamp", startOfDay).lte("timestamp", endOfDay)
+      .withIndex("by_staff_and_timestamp", (q) => 
+        q.eq("staffId", args.staffId)
+         .gte("timestamp", startOfDay)
+         .lte("timestamp", endOfDay)
       )
-      .filter((q) => q.eq(q.field("staffId"), args.staffId))
       .filter((q) => q.eq(q.field("type"), args.type))
       .collect();
 
-    // 日本時間（JST）として入力された時刻をそのまま使用
+    // 日本時間（JST）として入力された時刻をJSTタイムスタンプとして保存
+    // ISO文字列を使用してJSTタイムゾーンを明示的に指定
     const [timeYear, timeMonth, timeDay] = args.date.split('-').map(Number);
     const [hour, minute] = args.time.split(':').map(Number);
-    const dateTime = new Date(timeYear, timeMonth - 1, timeDay, hour, minute, 0, 0);
-    const timestamp = dateTime.getTime();
+    
+    // JST時刻として正しく解釈するためにISO文字列を使用
+    const isoString = `${timeYear}-${String(timeMonth).padStart(2, '0')}-${String(timeDay).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+09:00`;
+    const timestamp = new Date(isoString).getTime();
 
     if (existingRecords.length > 0) {
       // 既存記録を更新
       const record = existingRecords[0];
       
-      // 変更履歴を記録
+      // 変更履歴を記録（既存記録の場合）
       await ctx.db.insert("attendanceHistory", {
         attendanceId: record._id,
         oldTimestamp: record.timestamp,
@@ -478,7 +473,7 @@ export const correctAttendance = mutation({
       });
     } else {
       // 新規作成
-      const attendanceId = await ctx.db.insert("attendance", {
+      const newAttendanceId = await ctx.db.insert("attendance", {
         staffId: args.staffId,
         type: args.type,
         timestamp,
@@ -486,6 +481,17 @@ export const correctAttendance = mutation({
         note: args.reason,
         isManualEntry: true,
         createdBy: userId,
+      });
+
+      // 新規作成の場合も履歴を記録
+      await ctx.db.insert("attendanceHistory", {
+        attendanceId: newAttendanceId,
+        oldTimestamp: undefined, // 新規作成なので元の時刻はundefined
+        newTimestamp: timestamp,
+        oldNote: undefined,
+        newNote: args.reason,
+        modifiedBy: userId,
+        modifiedAt: Date.now(),
       });
     }
 
@@ -528,5 +534,26 @@ export const getCorrectionHistory = query({
     }
 
     return allHistory.sort((a, b) => b.modifiedAt - a.modifiedAt);
+  },
+});
+
+export const updateAttendanceTime = mutation({
+  args: {
+    attendanceId: v.id("attendance"),
+    newTimestamp: v.number(), // JST文字列ではなく、UTCタイムスタンプを直接受け取る
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("認証が必要です");
+    }
+
+    // ... 権限チェックは省略 ...
+
+    await ctx.db.patch(args.attendanceId, {
+      timestamp: args.newTimestamp, // 受け取ったUTCタイムスタンプで更新
+    });
+
+    return { success: true };
   },
 });

@@ -3,6 +3,7 @@ import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { toast } from "sonner";
+import { formatToJST, convertToUTC, getStartOfJSTDay, getEndOfJSTDay } from "@/lib/timezone";
 
 interface StaffDetailProps {
   staffId: Id<"staff">;
@@ -25,10 +26,14 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
   
+  // UTC期間を計算してAPIに渡す
+  const startOfMonth = getStartOfJSTDay(new Date(currentDate.year, currentDate.month - 1, 1));
+  const endOfMonth = getEndOfJSTDay(new Date(currentDate.year, currentDate.month, 0));
+
   const monthlyAttendance = useQuery(api.staffAttendance.getStaffMonthlyAttendance, {
     staffId,
-    year: currentDate.year,
-    month: currentDate.month,
+    startOfMonth,
+    endOfMonth,
   });
 
   const appliedSettings = useQuery(api.staffAttendance.getStaffMonthlyAppliedSettings, {
@@ -42,6 +47,15 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
 
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [correctionData, setCorrectionData] = useState({
+    date: "",
+    type: "clock_in" as "clock_in" | "clock_out",
+    time: "",
+    reason: "",
+  });
+
+  // 新規勤怠記録作成用のstate
+  const [showNewRecordModal, setShowNewRecordModal] = useState(false);
+  const [newRecordData, setNewRecordData] = useState({
     date: "",
     type: "clock_in" as "clock_in" | "clock_out",
     time: "",
@@ -77,7 +91,26 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     }
   };
 
-  // 修正履歴は上記で取得
+  // 月次勤怠データを日付ごとにグループ化
+  const groupedAttendance = monthlyAttendance ? monthlyAttendance.reduce((acc, record) => {
+    const day = formatToJST(record.timestamp, "yyyy-MM-dd");
+    if (!acc[day]) {
+      acc[day] = { date: day, clockIn: null, clockOut: null };
+    }
+
+    if (record.type === "clock_in") {
+      if (!acc[day].clockIn || record.timestamp < acc[day].clockIn.timestamp) {
+        acc[day].clockIn = { timestamp: record.timestamp, id: record._id };
+      }
+    } else { // clock_out
+      if (!acc[day].clockOut || record.timestamp > acc[day].clockOut.timestamp) {
+        acc[day].clockOut = { timestamp: record.timestamp, id: record._id };
+      }
+    }
+    return acc;
+  }, {} as Record<string, any>) : {};
+
+  const dailyAttendance = Object.values(groupedAttendance).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -96,11 +129,8 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   }
 
   const formatTime = (timestamp: number) => {
-    // UTCタイムスタンプを日本時間（JST）に変換して表示
-    const date = new Date(timestamp + (9 * 60 * 60 * 1000)); // UTC+9時間
-    const hours = String(date.getUTCHours()).padStart(2, '0');
-    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+    // UTCタイムスタンプをJST表示に変換
+    return formatToJST(timestamp, "HH:mm");
   };
 
   const formatDate = (dateString: string) => {
@@ -217,7 +247,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     const consecutiveErrors = new Map();
     const allRecords: Array<{ date: string; timestamp: number; type: 'clock_in' | 'clock_out' }> = [];
     
-    monthlyAttendance.forEach(day => {
+    dailyAttendance.forEach(day => {
       if (day.clockIn) allRecords.push({ date: day.date, timestamp: day.clockIn.timestamp, type: 'clock_in' });
       if (day.clockOut) allRecords.push({ date: day.date, timestamp: day.clockOut.timestamp, type: 'clock_out' });
     });
@@ -237,22 +267,6 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   };
 
   const consecutiveErrors = detectConsecutiveErrors();
-
-  const getErrorBadge = (error: string) => {
-    return (
-      <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-        {error}
-      </span>
-    );
-  };
-
-  const getNormalBadge = () => {
-    return (
-      <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-        正常
-      </span>
-    );
-  };
 
   const getDayStatusBadges = (day: any) => {
     const badges: React.JSX.Element[] = [];
@@ -309,14 +323,14 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   });
 
   const calculateMonthlySummary = () => {
-    if (!monthlyAttendance || !workSettings || workSettings.length === 0) {
+    if (!dailyAttendance || !workSettings || workSettings.length === 0) {
       return { totalHours: "0時間0分", overtimeHours: "0時間0分" };
     }
     
     let totalMinutes = 0;
     let overtimeMinutes = 0;
     
-    monthlyAttendance.forEach(day => {
+    dailyAttendance.forEach(day => {
       if (day.clockIn && day.clockOut) {
         const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
         totalMinutes += dayMinutes;
@@ -347,11 +361,11 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   const { totalHours, overtimeHours } = calculateMonthlySummary();
 
   const getAttendanceStats = () => {
-    if (!monthlyAttendance) return { workDays: 0 };
+    if (!dailyAttendance) return { workDays: 0 };
     
     let workDays = 0;
     
-    monthlyAttendance.forEach(day => {
+    dailyAttendance.forEach(day => {
       if (day.clockIn) {
         workDays++;
       }
@@ -363,9 +377,9 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   const attendanceStats = getAttendanceStats();
 
   const exportToCSV = () => {
-    if (!monthlyAttendance?.length) return toast.error("出力するデータがありません");
+    if (!dailyAttendance?.length) return toast.error("出力するデータがありません");
     const csvData = [["日付", "曜日", "出勤時刻", "退勤時刻", "勤務時間", "適用設定", "残業時間"]];
-    monthlyAttendance.forEach(day => {
+    dailyAttendance.forEach(day => {
       const date = new Date(day.date);
       let appliedSetting = "";
       let overtimeForDay = "";
@@ -472,6 +486,58 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     }
   };
 
+  // 新規勤怠記録作成用の関数
+  const openNewRecordModal = () => {
+    setNewRecordData({
+      date: `${currentDate.year}-${String(currentDate.month).padStart(2, '0')}-01`,
+      type: "clock_in",
+      time: "",
+      reason: "",
+    });
+    setShowNewRecordModal(true);
+  };
+
+  const closeNewRecordModal = () => {
+    setShowNewRecordModal(false);
+    setNewRecordData({
+      date: "",
+      type: "clock_in",
+      time: "",
+      reason: "",
+    });
+  };
+
+  const handleNewRecordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newRecordData.date) {
+      toast.error("日付を選択してください");
+      return;
+    }
+    if (!newRecordData.time) {
+      toast.error("時刻を入力してください");
+      return;
+    }
+    if (!newRecordData.reason.trim()) {
+      toast.error("作成理由を入力してください");
+      return;
+    }
+
+    try {
+      await correctAttendance({
+        staffId,
+        date: newRecordData.date,
+        type: newRecordData.type,
+        time: newRecordData.time,
+        reason: newRecordData.reason,
+      });
+      toast.success("新しい勤怠記録を作成しました");
+      closeNewRecordModal();
+    } catch (error) {
+      toast.error("作成に失敗しました");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ヘッダー */}
@@ -560,12 +626,20 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
             <h2 className="text-lg font-semibold text-gray-900">勤怠記録</h2>
             <div className="flex items-center gap-2">
               {!isRestrictedMonth && (
-                <button
-                  onClick={exportToCSV}
-                  className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors"
-                >
-                  CSV出力
-                </button>
+                <>
+                  <button
+                    onClick={openNewRecordModal}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                  >
+                    新規作成
+                  </button>
+                  <button
+                    onClick={exportToCSV}
+                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors"
+                  >
+                    CSV出力
+                  </button>
+                </>
               )}
               <button
                 onClick={() => changeMonth(-1)}
@@ -631,14 +705,14 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
             </div>
-          ) : monthlyAttendance.length === 0 ? (
+          ) : dailyAttendance.length === 0 ? (
             <div className="text-center py-8">
               <span className="text-gray-400 text-4xl">📅</span>
               <p className="text-gray-500 mt-4">この月の勤怠記録がありません</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {monthlyAttendance.map((day) => {
+              {dailyAttendance.map((day) => {
                 const statusBadges = getDayStatusBadges(day);
                 let appliedSetting = "";
                 let overtimeForDay = "";
@@ -648,7 +722,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                   
                   // 初回のみ自動割り当てを実行（設定がない場合のみ）
                   if (appliedSettings && !appliedSettings[day.date] && !selectedSettings.has(day.date)) {
-                    handleAutoAssign(day.date, dayMinutes);
+                    void handleAutoAssign(day.date, dayMinutes);
                   }
                   
                   const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
@@ -705,7 +779,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                             <span className="text-xs text-gray-500">適用設定</span>
                             <select
                               value={appliedSettings && appliedSettings[day.date] ? appliedSettings[day.date].workSettingId : (selectedSettings.get(day.date) || 'auto')}
-                              onChange={(e) => handleSettingChange(day.date, e.target.value)}
+                              onChange={(e) => void handleSettingChange(day.date, e.target.value)}
                               className="text-xs font-medium text-blue-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer w-full"
                             >
                               <option value="auto">{appliedSetting || "—"}</option>
@@ -854,6 +928,104 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
           </div>
         </div>
       )}
+
+      {/* 新規勤怠記録作成モーダル */}
+      {showNewRecordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">新規勤怠記録作成</h2>
+                <button
+                  onClick={closeNewRecordModal}
+                  className="text-gray-400 hover:text-gray-600 text-xl"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <form onSubmit={handleNewRecordSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    日付 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={newRecordData.date}
+                    onChange={(e) => setNewRecordData({ ...newRecordData, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    記録種別 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newRecordData.type}
+                    onChange={(e) => setNewRecordData({ ...newRecordData, type: e.target.value as "clock_in" | "clock_out" })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="clock_in">出勤時刻</option>
+                    <option value="clock_out">退勤時刻</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    時刻 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={newRecordData.time}
+                    onChange={(e) => setNewRecordData({ ...newRecordData, time: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    作成理由 <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={newRecordData.reason}
+                    onChange={(e) => setNewRecordData({ ...newRecordData, reason: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows={3}
+                    placeholder="例：打刻忘れのため後日入力"
+                    required
+                  />
+                </div>
+
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>注意：</strong>この機能は打刻を忘れた日の勤怠記録を後日作成するためのものです。既存の記録を修正する場合は「修正」ボタンをご利用ください。
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    記録を作成
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeNewRecordModal}
+                    className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+} 

@@ -214,7 +214,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
           </p>
         </div>
         <button
-          onClick={handleCreateDummyData}
+          onClick={() => void handleCreateDummyData()}
           className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
         >
           本日のダミーデータ作成
@@ -356,7 +356,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
                 </button>
               </div>
               
-              <form onSubmit={handleCorrectionSubmit} className="space-y-4">
+              <form onSubmit={(e) => void handleCorrectionSubmit(e)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     日付 <span className="text-red-500">*</span>
@@ -454,4 +454,4 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
       )}
     </div>
   );
-}
+} 

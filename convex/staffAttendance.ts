@@ -2,12 +2,13 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
-// スタッフの月次勤怠データを取得
+// スタッフの月次勤怠データを取得（リファクタリング版）
+// JST変換の責務をフロントエンドに移譲し、バックエンドはUTCに専念する
 export const getStaffMonthlyAttendance = query({
   args: {
     staffId: v.id("staff"),
-    year: v.number(),
-    month: v.number(),
+    startOfMonth: v.number(), // UTCタイムスタンプ
+    endOfMonth: v.number(),   // UTCタイムスタンプ
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -20,42 +21,23 @@ export const getStaffMonthlyAttendance = query({
       throw new Error("スタッフが見つかりません");
     }
 
-    // 月の開始と終了を計算
-    const startOfMonth = new Date(args.year, args.month - 1, 1).getTime();
-    const endOfMonth = new Date(args.year, args.month, 0, 23, 59, 59, 999).getTime();
-
-    // 期間内の勤怠データを取得
+    // 指定されたUTC期間内の勤怠データを取得
     const attendanceRecords = await ctx.db
       .query("attendance")
-      .withIndex("by_date", (q) => 
-        q.gte("timestamp", startOfMonth).lte("timestamp", endOfMonth)
+      .withIndex("by_staff_and_timestamp", (q) => 
+        q.eq("staffId", args.staffId)
+         .gte("timestamp", args.startOfMonth)
+         .lte("timestamp", args.endOfMonth)
       )
-      .filter((q) => q.eq(q.field("staffId"), args.staffId))
+      .order("asc") // タイムスタンプ順にソート
       .collect();
 
-    // 日付ごとにグループ化
-    const dailyRecords = new Map();
-    attendanceRecords.forEach(record => {
-      const date = new Date(record.timestamp);
-      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      
-      if (!dailyRecords.has(dateKey)) {
-        dailyRecords.set(dateKey, { date: dateKey, clockIn: null, clockOut: null });
-      }
-      
-      const dayRecord = dailyRecords.get(dateKey);
-      if (record.type === "clock_in") {
-        dayRecord.clockIn = record;
-      } else {
-        dayRecord.clockOut = record;
-      }
-    });
-
-    return Array.from(dailyRecords.values()).sort((a, b) => a.date.localeCompare(b.date));
+    // 日付ごとのグループ化や集計はフロントエンドで行う
+    return attendanceRecords;
   },
 });
 
-// 月次適用設定を取得
+// 月次適用設定を取得（リファクタリング版）
 export const getStaffMonthlyAppliedSettings = query({
   args: {
     staffId: v.id("staff"),
@@ -73,11 +55,11 @@ export const getStaffMonthlyAppliedSettings = query({
       throw new Error("スタッフが見つかりません");
     }
 
-    // 月の開始と終了を計算
+    // 月の開始日と終了日をUTCで計算 (dateは 'YYYY-MM-DD' 形式)
     const startDate = `${args.year}-${String(args.month).padStart(2, '0')}-01`;
-    const lastDay = new Date(args.year, args.month, 0).getDate();
+    const lastDay = new Date(Date.UTC(args.year, args.month, 0)).getUTCDate();
     const endDate = `${args.year}-${String(args.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
+    
     // 期間内の適用設定を取得
     const appliedSettings = await ctx.db
       .query("appliedWorkSettings")

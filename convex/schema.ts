@@ -36,7 +36,8 @@ const applicationTables = {
   })
     .index("by_staff", ["staffId"])
     .index("by_date", ["timestamp"])
-    .index("by_created_by", ["createdBy"]),
+    .index("by_created_by", ["createdBy"])
+    .index("by_staff_and_timestamp", ["staffId", "timestamp"]),
 
   attendanceHistory: defineTable({
     attendanceId: v.id("attendance"),
