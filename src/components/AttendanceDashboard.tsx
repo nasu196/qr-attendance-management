@@ -17,11 +17,12 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     
     if (attendance.clockIn && attendance.clockOut) {
       const workHours = (attendance.clockOut.timestamp - attendance.clockIn.timestamp) / (1000 * 60 * 60);
-      if (workHours >= 24) {
-        errors.push("24時間以上の勤務");
-      }
+      
+      // 負の値や異常値のチェック
       if (workHours < 0) {
         errors.push("退勤時刻が出勤時刻より早い");
+      } else if (workHours >= 24) {
+        errors.push("24時間以上の勤務");
       }
     }
     

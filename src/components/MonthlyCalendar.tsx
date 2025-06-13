@@ -287,7 +287,13 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
                                 )}
                                 {dayData.clockIn && dayData.clockOut && (
                                   <div className="text-xs text-gray-500">
-                                    {Math.round((dayData.clockOut.timestamp - dayData.clockIn.timestamp) / (1000 * 60 * 60) * 10) / 10}h
+                                    {(() => {
+                                      const totalHours = (dayData.clockOut.timestamp - dayData.clockIn.timestamp) / (1000 * 60 * 60);
+                                      if (totalHours < 0 || totalHours > 24) {
+                                        return "エラー";
+                                      }
+                                      return `${Math.round(totalHours * 10) / 10}h`;
+                                    })()}
                                   </div>
                                 )}
                               </div>
