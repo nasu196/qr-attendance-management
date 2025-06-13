@@ -31,8 +31,6 @@ export function StaffList({ isPremium }: StaffListProps) {
   const [showInactiveList, setShowInactiveList] = useState(false);
   const [editingStaffId, setEditingStaffId] = useState<Id<"staff"> | null>(null);
   const [viewingStaffId, setViewingStaffId] = useState<Id<"staff"> | null>(null);
-  const [showBulkTagModal, setShowBulkTagModal] = useState(false);
-  const [bulkTags, setBulkTags] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     tags: [] as string[],
@@ -188,36 +186,6 @@ export function StaffList({ isPremium }: StaffListProps) {
       toast.error("エラーが発生しました");
     }
   };
-
-  const handleBulkTagEdit = () => {
-    if (selectedStaff.length === 0) return;
-    setShowBulkTagModal(true);
-  };
-
-  const handleBulkTagSave = async () => {
-    if (selectedStaff.length === 0) return;
-    
-    try {
-      for (const staffId of selectedStaff) {
-        const staff = staffList?.find(s => s._id === staffId);
-        if (staff) {
-          await updateStaff({
-            staffId,
-            name: staff.name,
-            tags: bulkTags.length > 0 ? bulkTags : undefined,
-          });
-        }
-      }
-      toast.success(`${selectedStaff.length}名のスタッフのタグを更新しました`);
-      setShowBulkTagModal(false);
-      setBulkTags([]);
-      setSelectedStaff([]);
-    } catch (error) {
-      toast.error("エラーが発生しました");
-    }
-  };
-
-
 
   const handleSubmitStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -414,8 +382,6 @@ export function StaffList({ isPremium }: StaffListProps) {
                   availableTags={allUsedTags || []}
                 />
 
-
-
                 <div className="flex gap-2 pt-4">
                   <button
                     type="submit"
@@ -452,12 +418,6 @@ export function StaffList({ isPremium }: StaffListProps) {
                 QRコード一括印刷
               </button>
               <button
-                onClick={handleBulkTagEdit}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-              >
-                タグ一括編集
-              </button>
-              <button
                 onClick={handleDeactivateSelected}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
@@ -481,24 +441,6 @@ export function StaffList({ isPremium }: StaffListProps) {
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
               >
                 一括有効化
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* バルクタグ編集モーダル */}
-      {showBulkTagModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h2 className="text-lg font-semibold mb-4">タグ一括編集 ({selectedStaff.length}名)</h2>
-            <TagInput tags={bulkTags} onTagsChange={setBulkTags} availableTags={allUsedTags || []} />
-            <div className="flex gap-2 pt-4">
-              <button onClick={handleBulkTagSave} className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg">
-                適用
-              </button>
-              <button onClick={() => setShowBulkTagModal(false)} className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg">
-                キャンセル
               </button>
             </div>
           </div>
