@@ -34,6 +34,49 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
     }
   }, [workSettings, createInitialSettings]);
 
+  // プレミアムプランでない場合はアクセス制限
+  if (!isPremium) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow p-8 text-center">
+          <span className="text-gray-400 text-6xl">🔒</span>
+          <h1 className="text-2xl font-bold text-gray-900 mt-4 mb-2">勤務設定（プロプラン限定）</h1>
+          <p className="text-gray-600 mb-6">
+            勤務設定機能は有料プランでご利用いただけます
+          </p>
+          <div className="space-y-4 text-left max-w-lg mx-auto">
+            <div className="flex items-start gap-3">
+              <span className="text-blue-600 mt-1">✓</span>
+              <div>
+                <p className="font-medium text-gray-900">柔軟な勤務時間設定</p>
+                <p className="text-gray-600 text-sm">日勤・夜勤・パートなど様々な勤務パターンに対応</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-blue-600 mt-1">✓</span>
+              <div>
+                <p className="font-medium text-gray-900">正確な残業時間計算</p>
+                <p className="text-gray-600 text-sm">設定に基づいて残業時間を自動計算</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-blue-600 mt-1">✓</span>
+              <div>
+                <p className="font-medium text-gray-900">自動適用機能</p>
+                <p className="text-gray-600 text-sm">勤務時間に応じて最適な設定を自動選択</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-6">
+            <p className="text-gray-500 text-sm">
+              左下の開発用スイッチで有料プランに切り替えてお試しください
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const resetForm = () => {
     setFormData({
       name: "",

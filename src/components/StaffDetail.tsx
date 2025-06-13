@@ -378,13 +378,20 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
 
   const exportToCSV = () => {
     if (!dailyAttendance?.length) return toast.error("出力するデータがありません");
-    const csvData = [["日付", "曜日", "出勤時刻", "退勤時刻", "勤務時間", "適用設定", "残業時間"]];
+    
+    // プレミアムプランの場合は適用設定と残業時間を含める
+    const headers = isPremium 
+      ? ["日付", "曜日", "出勤時刻", "退勤時刻", "勤務時間", "適用設定", "残業時間"]
+      : ["日付", "曜日", "出勤時刻", "退勤時刻", "勤務時間"];
+    
+    const csvData = [headers];
+    
     dailyAttendance.forEach(day => {
       const date = new Date(day.date);
       let appliedSetting = "";
       let overtimeForDay = "";
       
-      if (day.clockIn && day.clockOut) {
+      if (isPremium && day.clockIn && day.clockOut) {
         const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
         const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
         if (appliedSettingObj) {
@@ -402,21 +409,27 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
           appliedSetting = "—";
           overtimeForDay = "—";
         }
-      } else {
+      } else if (isPremium) {
         appliedSetting = "—";
         overtimeForDay = "—";
       }
       
-      csvData.push([
+      const rowData = [
         day.date, 
         date.toLocaleDateString("ja-JP", { weekday: "short" }), 
         day.clockIn ? formatTime(day.clockIn.timestamp) : "",
         day.clockOut ? formatTime(day.clockOut.timestamp) : "",
         calculateWorkingHours(day.clockIn, day.clockOut) || "",
-        appliedSetting,
-        overtimeForDay
-      ]);
+      ];
+      
+      // プレミアムプランの場合のみ適用設定と残業時間を追加
+      if (isPremium) {
+        rowData.push(appliedSetting, overtimeForDay);
+      }
+      
+      csvData.push(rowData);
     });
+    
     const blob = new Blob([csvData.map(row => row.join(",")).join("\n")], { type: "text/csv" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -774,7 +787,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                             {calculateWorkingHours(day.clockIn, day.clockOut) || "—"}
                           </p>
                         </div>
-                        {workSettings && (
+                        {workSettings && isPremium && (
                           <div className="w-32 flex-shrink-0">
                             <span className="text-xs text-gray-500">適用設定</span>
                             <select
@@ -792,10 +805,12 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                             </select>
                           </div>
                         )}
-                        <div className="w-20 flex-shrink-0">
-                          <span className="text-xs text-gray-500">残業時間</span>
-                          <p className="text-sm font-medium text-orange-600">{overtimeForDay || "—"}</p>
-                        </div>
+                        {isPremium && (
+                          <div className="w-20 flex-shrink-0">
+                            <span className="text-xs text-gray-500">残業時間</span>
+                            <p className="text-sm font-medium text-orange-600">{overtimeForDay || "—"}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">

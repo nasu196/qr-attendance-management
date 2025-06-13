@@ -24,7 +24,7 @@ export default function App() {
     { id: "qr-url" as MenuItem, label: "QR打刻ページ", icon: "📱", premium: false },
     { id: "report" as MenuItem, label: "月次レポート表示", icon: "📈", premium: true },
     { id: "calendar" as MenuItem, label: "月次カレンダー表示", icon: "📅", premium: true },
-    { id: "work-settings" as MenuItem, label: "勤務設定", icon: "⚙️", premium: false },
+    { id: "work-settings" as MenuItem, label: "勤務設定", icon: "⚙️", premium: true },
     { id: "help" as MenuItem, label: "ヘルプ", icon: "❓", premium: false },
   ];
 
