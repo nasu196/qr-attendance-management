@@ -719,12 +719,6 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                 
                 if (day.clockIn && day.clockOut) {
                   const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
-                  
-                  // 初回のみ自動割り当てを実行（設定がない場合のみ）
-                  if (appliedSettings && !appliedSettings[day.date] && !selectedSettings.has(day.date)) {
-                    void handleAutoAssign(day.date, dayMinutes);
-                  }
-                  
                   const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
                   if (appliedSettingObj) {
                     appliedSetting = appliedSettingObj.name;
