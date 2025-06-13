@@ -67,14 +67,8 @@ export const getPeriodReport = query({
 
       Array.from(dailyRecords.values()).forEach(day => {
         if (day.clockIn && day.clockOut) {
-          const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
-          
-          // 負の値や異常値のデータはスキップ
-          if (dayMinutes < 0 || dayMinutes > 1440) { // 1440分 = 24時間
-            return; // このdayの処理をスキップ
-          }
-          
           workDays++;
+          const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
           staffTotalMinutes += dayMinutes;
           
           // 8時間を超える場合は残業

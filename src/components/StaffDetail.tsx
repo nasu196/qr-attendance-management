@@ -303,19 +303,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
 
   const calculateWorkingHours = (clockIn: any, clockOut: any) => {
     if (!clockIn || !clockOut) return null;
-    
     const totalMinutes = (clockOut.timestamp - clockIn.timestamp) / (1000 * 60);
-    
-    // 負の値の場合（退勤時刻が出勤時刻より前）はエラー表示
-    if (totalMinutes < 0) {
-      return "データエラー";
-    }
-    
-    // 24時間を超える場合もエラー表示
-    if (totalMinutes > 1440) { // 1440分 = 24時間
-      return "データエラー";
-    }
-    
     const hours = Math.floor(totalMinutes / 60);
     const minutes = Math.floor(totalMinutes % 60);
     return `${hours}時間${minutes}分`;
@@ -345,12 +333,6 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     dailyAttendance.forEach(day => {
       if (day.clockIn && day.clockOut) {
         const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
-        
-        // 負の値や異常値のデータはスキップ
-        if (dayMinutes < 0 || dayMinutes > 1440) { // 1440分 = 24時間
-          return; // このdayの処理をスキップ
-        }
-        
         totalMinutes += dayMinutes;
         
         // 適用設定を取得して残業時間を計算
@@ -364,10 +346,6 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
         }
       }
     });
-    
-    // 負の値になった場合の対処
-    if (totalMinutes < 0) totalMinutes = 0;
-    if (overtimeMinutes < 0) overtimeMinutes = 0;
     
     const totalHours = Math.floor(totalMinutes / 60);
     const totalMins = Math.floor(totalMinutes % 60);
@@ -408,28 +386,21 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       
       if (day.clockIn && day.clockOut) {
         const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
-        
-        // 負の値や異常値の場合はエラー表示
-        if (dayMinutes < 0 || dayMinutes > 1440) { // 1440分 = 24時間
-          appliedSetting = "データエラー";
-          overtimeForDay = "データエラー";
-        } else {
-          const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
-          if (appliedSettingObj) {
-            appliedSetting = appliedSettingObj.name;
-            const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
-            if (dayMinutes > standardTotalMinutes) {
-              const overtimeMin = dayMinutes - standardTotalMinutes;
-              const overtimeHrs = Math.floor(overtimeMin / 60);
-              const overtimeMins = Math.floor(overtimeMin % 60);
-              overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
-            } else {
-              overtimeForDay = "0時間0分";
-            }
+        const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
+        if (appliedSettingObj) {
+          appliedSetting = appliedSettingObj.name;
+          const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
+          if (dayMinutes > standardTotalMinutes) {
+            const overtimeMin = dayMinutes - standardTotalMinutes;
+            const overtimeHrs = Math.floor(overtimeMin / 60);
+            const overtimeMins = Math.floor(overtimeMin % 60);
+            overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
           } else {
-            appliedSetting = "—";
-            overtimeForDay = "—";
+            overtimeForDay = "0時間0分";
           }
+        } else {
+          appliedSetting = "—";
+          overtimeForDay = "—";
         }
       } else {
         appliedSetting = "—";
@@ -748,28 +719,21 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                 
                 if (day.clockIn && day.clockOut) {
                   const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
-                  
-                  // 負の値や異常値の場合はエラー表示
-                  if (dayMinutes < 0 || dayMinutes > 1440) { // 1440分 = 24時間
-                    appliedSetting = "データエラー";
-                    overtimeForDay = "データエラー";
-                  } else {
-                    const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
-                    if (appliedSettingObj) {
-                      appliedSetting = appliedSettingObj.name;
-                      const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
-                      if (dayMinutes > standardTotalMinutes) {
-                        const overtimeMin = dayMinutes - standardTotalMinutes;
-                        const overtimeHrs = Math.floor(overtimeMin / 60);
-                        const overtimeMins = Math.floor(overtimeMin % 60);
-                        overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
-                      } else {
-                        overtimeForDay = "0時間0分";
-                      }
+                  const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
+                  if (appliedSettingObj) {
+                    appliedSetting = appliedSettingObj.name;
+                    const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
+                    if (dayMinutes > standardTotalMinutes) {
+                      const overtimeMin = dayMinutes - standardTotalMinutes;
+                      const overtimeHrs = Math.floor(overtimeMin / 60);
+                      const overtimeMins = Math.floor(overtimeMin % 60);
+                      overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
                     } else {
-                      appliedSetting = "—";
-                      overtimeForDay = "—";
+                      overtimeForDay = "0時間0分";
                     }
+                  } else {
+                    appliedSetting = "—";
+                    overtimeForDay = "—";
                   }
                 } else {
                   appliedSetting = "—";

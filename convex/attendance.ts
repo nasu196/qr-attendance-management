@@ -277,20 +277,24 @@ export const createAttendanceDummyData =
       }
     }
 
-    const today = new Date(); // 現在のUTC時刻
-    today.setUTCHours(0, 0, 0, 0); // 今日のUTCの始まりに設定
+    const today = new Date();
 
     for (let i = 0; i < 30; i++) {
-      const date = new Date(today);
-      date.setUTCDate(today.getUTCDate() - i);
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() - i);
+      
+      const year = targetDate.getFullYear();
+      const month = targetDate.getMonth() + 1;
+      const day = targetDate.getDate();
       
       // 80%の確率で出勤
       if (Math.random() > 0.2) {
         for (const staff of staffList) {
-          // 出勤時刻 (UTC)
-          const clockInHour = 8; // JST 17時 -> UTC 8時
+          // 出勤時刻をJSTで8:30-9:30の範囲でランダム生成
+          const clockInHour = 8;
           const clockInMinute = 30 + Math.floor(Math.random() * 60);
-          const clockInTimestamp = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), clockInHour, clockInMinute);
+          const clockInIsoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(clockInHour).padStart(2, '0')}:${String(clockInMinute).padStart(2, '0')}:00+09:00`;
+          const clockInTimestamp = new Date(clockInIsoString).getTime();
 
           await ctx.db.insert("attendance", {
             staffId: staff._id,
@@ -302,10 +306,11 @@ export const createAttendanceDummyData =
 
           // 95%の確率で退勤記録も作成
           if (Math.random() > 0.05) {
-            // 退勤時刻 (UTC)
-            const clockOutHour = 17 + Math.floor(Math.random() * 2) - 9; // JST 17-18時 -> UTC 8-9時
-            const clockOutMinute = clockOutHour === 8 ? 30 + Math.floor(Math.random() * 30) : Math.floor(Math.random() * 60);
-            const clockOutTimestamp = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), clockOutHour, clockOutMinute);
+            // 退勤時刻をJSTで17:00-19:00の範囲でランダム生成
+            const clockOutHour = 17 + Math.floor(Math.random() * 2);
+            const clockOutMinute = Math.floor(Math.random() * 60);
+            const clockOutIsoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(clockOutHour).padStart(2, '0')}:${String(clockOutMinute).padStart(2, '0')}:00+09:00`;
+            const clockOutTimestamp = new Date(clockOutIsoString).getTime();
 
             await ctx.db.insert("attendance", {
               staffId: staff._id,
@@ -359,7 +364,7 @@ export const createTodayDummyData = mutation({
       }
     }
 
-    // 現実的な日勤シナリオ (時刻はJST基準で考え、UTCに変換して登録)
+    // 現実的な日勤シナリオ (時刻はJST基準で考え、正しくタイムスタンプに変換して登録)
     const scenarios = [
       { clockIn: "08:50", clockOut: "17:45" }, // 正常
       { clockIn: "09:05", clockOut: "18:10" }, // 遅刻気味
@@ -369,14 +374,20 @@ export const createTodayDummyData = mutation({
       { clockIn: "08:55", clockOut: "18:05" },
     ];
 
-    const todayUTC = new Date();
+    // 今日の日付をJSTで取得
+    const todayJST = new Date();
+    const year = todayJST.getFullYear();
+    const month = todayJST.getMonth() + 1;
+    const day = todayJST.getDate();
 
     for (let i = 0; i < Math.min(staffList.length, scenarios.length); i++) {
       const staff = staffList[i];
       const scenario = scenarios[i];
       
+      // 出勤時刻をJSTとして正しく処理
       const [inH, inM] = scenario.clockIn.split(':').map(Number);
-      const clockInTimestamp = Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), todayUTC.getUTCDate(), inH - 9, inM);
+      const clockInIsoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(inH).padStart(2, '0')}:${String(inM).padStart(2, '0')}:00+09:00`;
+      const clockInTimestamp = new Date(clockInIsoString).getTime();
 
       await ctx.db.insert("attendance", {
         staffId: staff._id,
@@ -387,8 +398,10 @@ export const createTodayDummyData = mutation({
       });
 
       if (scenario.clockOut) {
+        // 退勤時刻をJSTとして正しく処理
         const [outH, outM] = scenario.clockOut.split(':').map(Number);
-        const clockOutTimestamp = Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), todayUTC.getUTCDate(), outH - 9, outM);
+        const clockOutIsoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(outH).padStart(2, '0')}:${String(outM).padStart(2, '0')}:00+09:00`;
+        const clockOutTimestamp = new Date(clockOutIsoString).getTime();
         
         await ctx.db.insert("attendance", {
           staffId: staff._id,
