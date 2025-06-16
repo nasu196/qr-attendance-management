@@ -252,6 +252,7 @@ export const detectBestWorkSetting = query({
     let minDiff = Infinity;
 
     for (const setting of settings) {
+      // 総労働時間（勤務時間+休憩時間）で比較
       const settingTotalMinutes = (setting.workHours + setting.breakHours) * 60;
       const diff = Math.abs(args.workMinutes - settingTotalMinutes);
 

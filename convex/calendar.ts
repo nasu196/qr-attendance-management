@@ -40,57 +40,62 @@ export const getMonthlyCalendar = query({
     let totalAttendanceCount = 0;
     let maxAttendance = 0;
 
-    // 出勤・退勤記録を分離
-    const clockInRecords = attendanceRecords.filter(record => record.type === "clock_in");
-    const clockOutRecords = attendanceRecords.filter(record => record.type === "clock_out");
-
-    // 退勤記録をマップ化
-    const clockOutMap = new Map<string, any>();
-    clockOutRecords.forEach(record => {
-      // UTCタイムスタンプをJSTに変換してから日付を計算
-      const jstDate = new Date(record.timestamp + 9 * 60 * 60 * 1000);
-      const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
-      const key = `${record.staffId}-${dateKey}`;
-      clockOutMap.set(key, record);
-    });
-
-    // 日付ごとにグループ化
-    const recordsByDate = new Map<string, any[]>();
-    clockInRecords.forEach(record => {
-      // UTCタイムスタンプをJSTに変換してから日付を計算
-      const jstDate = new Date(record.timestamp + 9 * 60 * 60 * 1000);
-      const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
+    // ペアIDベースでペアリング
+    const pairMap = new Map<string, { clockIn: any, clockOut: any }>();
+    
+    attendanceRecords.forEach(record => {
+      const pairId = record.pairId || record._id;
       
-      if (!recordsByDate.has(dateKey)) {
-        recordsByDate.set(dateKey, []);
+      if (!pairMap.has(pairId)) {
+        pairMap.set(pairId, { clockIn: null, clockOut: null });
       }
-      recordsByDate.get(dateKey)!.push(record);
+      
+      const pair = pairMap.get(pairId)!;
+      if (record.type === "clock_in") {
+        pair.clockIn = record;
+      } else {
+        pair.clockOut = record;
+      }
     });
+
+    // 出勤日ベースで日付ごとにグループ化
+    const recordsByDate = new Map<string, any[]>();
+    
+    for (const pair of pairMap.values()) {
+      if (pair.clockIn) {
+        // 出勤日を基準日とする
+        const jstDate = new Date(pair.clockIn.timestamp + 9 * 60 * 60 * 1000);
+        const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
+        
+        if (!recordsByDate.has(dateKey)) {
+          recordsByDate.set(dateKey, []);
+        }
+        recordsByDate.get(dateKey)!.push(pair);
+      }
+    }
 
     // 各日のデータを処理
-    for (const [dateKey, records] of recordsByDate.entries()) {
+    for (const [dateKey, pairs] of recordsByDate.entries()) {
       const attendingStaff = [];
       
-      for (const record of records) {
-        const staff = staffList.find(s => s._id === record.staffId);
-        if (staff) {
-          // 対応する退勤記録を探す
-          const clockOutKey = `${record.staffId}-${dateKey}`;
-          const clockOutRecord = clockOutMap.get(clockOutKey);
-          
-          attendingStaff.push({
-            staffId: staff._id,
-            name: staff.name,
-            employeeId: staff.employeeId,
-            clockIn: {
-              timestamp: record.timestamp,
-              status: record.status || "on_time",
-            },
-            clockOut: clockOutRecord ? {
-              timestamp: clockOutRecord.timestamp,
-              status: clockOutRecord.status || "on_time",
-            } : null,
-          });
+      for (const pair of pairs) {
+        if (pair.clockIn) {
+          const staff = staffList.find(s => s._id === pair.clockIn.staffId);
+          if (staff) {
+            attendingStaff.push({
+              staffId: staff._id,
+              name: staff.name,
+              employeeId: staff.employeeId,
+              clockIn: {
+                timestamp: pair.clockIn.timestamp,
+                status: pair.clockIn.status || "on_time",
+              },
+              clockOut: pair.clockOut ? {
+                timestamp: pair.clockOut.timestamp,
+                status: pair.clockOut.status || "on_time",
+              } : null,
+            });
+          }
         }
       }
 

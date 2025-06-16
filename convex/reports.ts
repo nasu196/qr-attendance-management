@@ -42,22 +42,20 @@ export const getPeriodReport = query({
     for (const staff of staffList) {
       const staffAttendance = attendanceRecords.filter(a => a.staffId === staff._id);
       
-      // 日付ごとにグループ化
-      const dailyRecords = new Map();
+      // ペアIDベースでペアリング
+      const pairRecords = new Map();
       staffAttendance.forEach(record => {
-        // UTCタイムスタンプをJSTに変換してから日付を計算
-        const jstDate = new Date(record.timestamp + 9 * 60 * 60 * 1000);
-        const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
+        const pairId = record.pairId || record._id;
         
-        if (!dailyRecords.has(dateKey)) {
-          dailyRecords.set(dateKey, { date: dateKey, clockIn: null, clockOut: null });
+        if (!pairRecords.has(pairId)) {
+          pairRecords.set(pairId, { clockIn: null, clockOut: null });
         }
         
-        const dayRecord = dailyRecords.get(dateKey);
+        const pair = pairRecords.get(pairId);
         if (record.type === "clock_in") {
-          dayRecord.clockIn = record;
+          pair.clockIn = record;
         } else {
-          dayRecord.clockOut = record;
+          pair.clockOut = record;
         }
       });
 
@@ -66,9 +64,9 @@ export const getPeriodReport = query({
       let staffTotalMinutes = 0;
       let staffOvertimeMinutes = 0;
 
-      Array.from(dailyRecords.values()).forEach(day => {
-        if (day.clockIn && day.clockOut) {
-          const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
+      Array.from(pairRecords.values()).forEach(pair => {
+        if (pair.clockIn && pair.clockOut) {
+          const dayMinutes = (pair.clockOut.timestamp - pair.clockIn.timestamp) / (1000 * 60);
           
           // 負の値や異常値をチェック
           if (dayMinutes < 0 || dayMinutes > 24 * 60) {

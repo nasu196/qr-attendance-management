@@ -28,6 +28,7 @@ const applicationTables = {
       v.literal("needs_review"), // 既存データとの互換性のため（削除予定）
       v.literal("normal") // 既存データとの互換性のため
     ),
+    pairId: v.optional(v.string()), // 出勤・退勤のペアを識別するID
     note: v.optional(v.string()),
     isManualEntry: v.optional(v.boolean()),
     correctedAt: v.optional(v.number()),
@@ -37,7 +38,8 @@ const applicationTables = {
     .index("by_staff", ["staffId"])
     .index("by_date", ["timestamp"])
     .index("by_created_by", ["createdBy"])
-    .index("by_staff_and_timestamp", ["staffId", "timestamp"]),
+    .index("by_staff_and_timestamp", ["staffId", "timestamp"])
+    .index("by_pair_id", ["pairId"]),
 
   attendanceHistory: defineTable({
     attendanceId: v.id("attendance"),

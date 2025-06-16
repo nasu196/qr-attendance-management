@@ -32,31 +32,25 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     if (!todayAttendance) return new Map();
     
     const consecutiveErrors = new Map();
-    const allRecords: Array<{ staffId: string; timestamp: number; type: 'clock_in' | 'clock_out' }> = [];
     
+    // ペアIDベースで不整合ペアを検出
     todayAttendance.forEach(attendance => {
-      if (attendance.clockIn) allRecords.push({ 
-        staffId: attendance.staff._id, 
-        timestamp: attendance.clockIn.timestamp, 
-        type: 'clock_in' 
-      });
-      if (attendance.clockOut) allRecords.push({ 
-        staffId: attendance.staff._id, 
-        timestamp: attendance.clockOut.timestamp, 
-        type: 'clock_out' 
-      });
-    });
-    
-    allRecords.sort((a, b) => a.timestamp - b.timestamp);
-    
-    for (let i = 0; i < allRecords.length - 1; i++) {
-      const current = allRecords[i];
-      const next = allRecords[i + 1];
+      const errors = [];
       
-      if (current.staffId === next.staffId && current.type === next.type) {
-        consecutiveErrors.set(next.staffId, current.type === 'clock_in' ? "連続出勤打刻" : "連続退勤打刻");
+      // 出勤のみで退勤がない場合
+      if (attendance.clockIn && !attendance.clockOut) {
+        errors.push("退勤打刻なし");
       }
-    }
+      
+      // 退勤のみで出勤がない場合（理論上発生しないが念のため）
+      if (!attendance.clockIn && attendance.clockOut) {
+        errors.push("出勤打刻なし");
+      }
+      
+      if (errors.length > 0) {
+        consecutiveErrors.set(attendance.staff._id, errors[0]);
+      }
+    });
     
     return consecutiveErrors;
   };
@@ -94,6 +88,8 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
   
   const correctAttendance = useMutation(api.attendance.correctAttendance);
   const createDummyData = useMutation(api.attendance.createTodayDummyData);
+  const create2025MayJuneDummyData = useMutation(api.attendance.create2025MayJuneDummyData);
+  const cleanupDevData = useMutation(api.attendance.cleanupDevData);
   const [selectedStaff, setSelectedStaff] = useState<string | null>(null);
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [correctionData, setCorrectionData] = useState({
@@ -104,11 +100,8 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     reason: "",
   });
 
-  // 修正履歴を取得
-  const correctionHistory = useQuery(
-    api.attendance.getCorrectionHistory,
-    correctionData.staffId ? { staffId: correctionData.staffId as any } : "skip"
-  );
+  // 修正履歴を取得（AttendanceDashboardでは一時的に無効化）
+  const correctionHistory: any[] = [];
 
   if (!summary || !presentStaff) {
     return (
@@ -190,6 +183,28 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     }
   };
 
+  const handleCreate2025MayJuneDummyData = async () => {
+    try {
+      const result = await create2025MayJuneDummyData();
+      toast.success(result.message);
+    } catch (error) {
+      toast.error("2025年5月・6月のダミーデータ作成に失敗しました");
+    }
+  };
+
+  const handleCleanupDevData = async () => {
+    if (!window.confirm("全ての勤怠データと履歴を削除します。この操作は元に戻せません。実行しますか？")) {
+      return;
+    }
+    
+    try {
+      const result = await cleanupDevData();
+      toast.success(`データを削除しました（勤怠記録: ${result.deletedAttendance}件、履歴: ${result.deletedHistory}件）`);
+    } catch (error) {
+      toast.error("データ削除に失敗しました");
+    }
+  };
+
   const getErrorBadge = (error: string) => {
     return (
       <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -213,12 +228,26 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
             })}
           </p>
         </div>
-        <button
-          onClick={() => void handleCreateDummyData()}
-          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
-        >
-          本日のダミーデータ作成
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => void handleCreateDummyData()}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
+          >
+            本日のダミーデータ作成
+          </button>
+          <button
+            onClick={() => void handleCreate2025MayJuneDummyData()}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm whitespace-nowrap"
+          >
+            2025年5月・6月ダミーデータ作成
+          </button>
+          <button
+            onClick={() => void handleCleanupDevData()}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm whitespace-nowrap"
+          >
+            🗑️ データクリーンアップ
+          </button>
+        </div>
       </div>
 
       {/* サマリーカード */}
