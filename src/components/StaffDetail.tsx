@@ -258,9 +258,9 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       const workMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
       const workHours = workMinutes / 60;
       
-      // 夜勤対応：48時間制限に変更
-      if (workHours >= 48) {
-        errors.push("48時間以上の勤務");
+      // 夜勤対応：24時間制限に変更
+      if (workHours >= 24) {
+        errors.push("24時間以上の勤務");
       }
       if (workHours < 0) {
         errors.push("退勤時刻が出勤時刻より早い");
@@ -269,8 +269,9 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       // 適用設定より勤務時間が短い場合のエラー
       const appliedSetting = getAppliedSetting(day.date, workMinutes);
       if (appliedSetting) {
-        const standardTotalMinutes = (appliedSetting.workHours + appliedSetting.breakHours) * 60;
-        if (workMinutes < standardTotalMinutes) {
+        // 勤務時間のみで比較（休憩時間は除く）
+        const standardWorkMinutes = appliedSetting.workHours * 60;
+        if (workMinutes < standardWorkMinutes) {
           errors.push("勤務時間が設定より短い");
         }
       }
@@ -378,10 +379,11 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
         // 適用設定を取得して残業時間を計算
         const appliedSetting = getAppliedSetting(day.date, dayMinutes);
         if (appliedSetting) {
-          const standardTotalMinutes = (appliedSetting.workHours + appliedSetting.breakHours) * 60;
+          // 勤務時間のみで比較（休憩時間は除く）
+          const standardWorkMinutes = appliedSetting.workHours * 60;
           
-          if (dayMinutes > standardTotalMinutes) {
-            overtimeMinutes += dayMinutes - standardTotalMinutes;
+          if (dayMinutes > standardWorkMinutes) {
+            overtimeMinutes += dayMinutes - standardWorkMinutes;
           }
         }
       }
@@ -429,9 +431,10 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
         const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
         if (appliedSettingObj) {
           appliedSetting = appliedSettingObj.name;
-          const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
-          if (dayMinutes > standardTotalMinutes) {
-            const overtimeMin = dayMinutes - standardTotalMinutes;
+          // 勤務時間のみで比較（休憩時間は除く）
+          const standardWorkMinutes = appliedSettingObj.workHours * 60;
+          if (dayMinutes > standardWorkMinutes) {
+            const overtimeMin = dayMinutes - standardWorkMinutes;
             const overtimeHrs = Math.floor(overtimeMin / 60);
             const overtimeMins = Math.floor(overtimeMin % 60);
             overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
@@ -850,9 +853,10 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                   const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
                   if (appliedSettingObj) {
                     appliedSetting = appliedSettingObj.name;
-                    const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
-                    if (dayMinutes > standardTotalMinutes) {
-                      const overtimeMin = dayMinutes - standardTotalMinutes;
+                    // 勤務時間のみで比較（休憩時間は除く）
+                    const standardWorkMinutes = appliedSettingObj.workHours * 60;
+                    if (dayMinutes > standardWorkMinutes) {
+                      const overtimeMin = dayMinutes - standardWorkMinutes;
                       const overtimeHrs = Math.floor(overtimeMin / 60);
                       const overtimeMins = Math.floor(overtimeMin % 60);
                       overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
