@@ -422,6 +422,7 @@ export const correctAttendance = mutation({
   args: {
     staffId: v.id("staff"),
     pairId: v.optional(v.string()), // ペアID（出勤記録のID）
+    attendanceId: v.optional(v.id("attendance")), // 修正対象の具体的な記録ID
     date: v.string(), // 新しい日付
     type: v.union(v.literal("clock_in"), v.literal("clock_out")),
     time: v.string(), // 新しい時刻
@@ -443,31 +444,50 @@ export const correctAttendance = mutation({
       // ペアID基準の修正（既存記録を更新）
       let targetRecord = null;
       
-      if (args.type === "clock_in") {
-        // 出勤修正の場合：ペアIDと一致する出勤記録を探す
-        targetRecord = await ctx.db.get(args.pairId as Id<"attendance">);
-        if (!targetRecord || (targetRecord as any).type !== "clock_in") {
-          throw new Error("修正対象の出勤記録が見つかりません");
-        }
-      } else {
-        // 退勤修正の場合：ペアIDに対応する退勤記録を探す
-        const clockInRecord = await ctx.db.get(args.pairId as Id<"attendance">);
-        if (!clockInRecord) {
-          throw new Error("ペアの出勤記録が見つかりません");
+      if (args.attendanceId) {
+        // 具体的な記録IDが指定されている場合は、それを直接使用
+        targetRecord = await ctx.db.get(args.attendanceId);
+        if (!targetRecord) {
+          throw new Error("修正対象の記録が見つかりません");
         }
         
-        // そのペアの退勤記録を探す（同じスタッフの、出勤時刻より後の最初の退勤記録）
-        targetRecord = await ctx.db
-          .query("attendance")
-          .withIndex("by_staff_and_timestamp", (q) => 
-            q.eq("staffId", args.staffId).gt("timestamp", (clockInRecord as any).timestamp)
-          )
-          .filter((q) => q.eq(q.field("type"), "clock_out"))
-          .order("asc")
-          .first();
+        // 型と整合性をチェック
+        if ((targetRecord as any).type !== args.type) {
+          throw new Error(`修正対象の記録タイプ（${(targetRecord as any).type}）と指定されたタイプ（${args.type}）が一致しません`);
+        }
+        
+        // スタッフIDの整合性をチェック
+        if ((targetRecord as any).staffId !== args.staffId) {
+          throw new Error("修正対象の記録のスタッフIDが一致しません");
+        }
+      } else {
+        // 従来の方法（後方互換性のため）
+        if (args.type === "clock_in") {
+          // 出勤修正の場合：ペアIDと一致する出勤記録を探す
+          targetRecord = await ctx.db.get(args.pairId as Id<"attendance">);
+          if (!targetRecord || (targetRecord as any).type !== "clock_in") {
+            throw new Error("修正対象の出勤記録が見つかりません");
+          }
+        } else {
+          // 退勤修正の場合：ペアIDに対応する退勤記録を探す
+          const clockInRecord = await ctx.db.get(args.pairId as Id<"attendance">);
+          if (!clockInRecord) {
+            throw new Error("ペアの出勤記録が見つかりません");
+          }
           
-        if (!targetRecord) {
-          throw new Error("修正対象の退勤記録が見つかりません");
+          // そのペアの退勤記録を探す（同じスタッフの、出勤時刻より後の最初の退勤記録）
+          targetRecord = await ctx.db
+            .query("attendance")
+            .withIndex("by_staff_and_timestamp", (q) => 
+              q.eq("staffId", args.staffId).gt("timestamp", (clockInRecord as any).timestamp)
+            )
+            .filter((q) => q.eq(q.field("type"), "clock_out"))
+            .order("asc")
+            .first();
+            
+          if (!targetRecord) {
+            throw new Error("修正対象の退勤記録が見つかりません");
+          }
         }
       }
       

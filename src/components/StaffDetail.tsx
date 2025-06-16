@@ -53,6 +53,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     time: "",
     reason: "",
     pairId: "" as string,
+    attendanceId: "" as string,
   });
 
   // 削除確認モーダル用のstate
@@ -476,6 +477,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     let initialTime = "";
     let initialDate = "";
     let pairId = "";
+    let attendanceId = "";
     
     if (day && typeof day === 'object') {
       // ペアIDを設定（出勤記録のIDを使用）
@@ -487,11 +489,13 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
         initialTime = formatToJST(day.clockIn.timestamp, "HH:mm");
         // 出勤の場合は表示されている日付（day.date）を使用
         initialDate = day.date;
+        attendanceId = day.clockIn.id;
       } else if (day.clockOut) {
         initialType = "clock_out";
         initialTime = formatToJST(day.clockOut.timestamp, "HH:mm");
         // 退勤の場合は実際の退勤日付を計算
         initialDate = formatToJST(day.clockOut.timestamp, "yyyy-MM-dd");
+        attendanceId = day.clockOut.id;
       }
     }
     
@@ -501,6 +505,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       time: initialTime,
       reason: "",
       pairId,
+      attendanceId,
     });
     setShowCorrectionModal(true);
   };
@@ -560,6 +565,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       time: "",
       reason: "",
       pairId: "",
+      attendanceId: "",
     });
   };
 
@@ -591,6 +597,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       await correctAttendance({
         staffId,
         pairId, // 固定されたペアIDを送信
+        attendanceId: correctionData.attendanceId ? correctionData.attendanceId as Id<"attendance"> : undefined, // 具体的な記録IDを送信
         date: correctionData.date,
         type: correctionData.type,
         time: correctionData.time,
@@ -1013,11 +1020,12 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                       const newType = e.target.value as "clock_in" | "clock_out";
                       let newTime = "";
                       let newDate = correctionData.date;
+                      let newAttendanceId = "";
                       
                       // 元のペアIDを維持
                       const originalPairId = correctionData.pairId;
                       
-                      // 選択された修正対象に応じて時刻、日付を自動入力
+                      // 選択された修正対象に応じて時刻、日付、attendanceIdを自動入力
                       // ペアIDが設定されている場合は、そのペアから情報を取得
                       if (originalPairId) {
                         const targetDay = dailyAttendance.find(day => day.clockIn?.id === originalPairId);
@@ -1025,9 +1033,11 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                           if (newType === "clock_in" && targetDay.clockIn) {
                             newTime = formatToJST(targetDay.clockIn.timestamp, "HH:mm");
                             newDate = targetDay.date;
+                            newAttendanceId = targetDay.clockIn.id;
                           } else if (newType === "clock_out" && targetDay.clockOut) {
                             newTime = formatToJST(targetDay.clockOut.timestamp, "HH:mm");
                             newDate = formatToJST(targetDay.clockOut.timestamp, "yyyy-MM-dd");
+                            newAttendanceId = targetDay.clockOut.id;
                           }
                         }
                       } else {
@@ -1037,9 +1047,11 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                           if (newType === "clock_in" && selectedDay.clockIn) {
                             newTime = formatToJST(selectedDay.clockIn.timestamp, "HH:mm");
                             newDate = selectedDay.date;
+                            newAttendanceId = selectedDay.clockIn.id;
                           } else if (newType === "clock_out" && selectedDay.clockOut) {
                             newTime = formatToJST(selectedDay.clockOut.timestamp, "HH:mm");
                             newDate = formatToJST(selectedDay.clockOut.timestamp, "yyyy-MM-dd");
+                            newAttendanceId = selectedDay.clockOut.id;
                           }
                         }
                       }
@@ -1050,6 +1062,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                         time: newTime,
                         date: newDate,
                         pairId: originalPairId, // 元のペアIDを維持
+                        attendanceId: newAttendanceId, // 具体的な記録IDを設定
                       });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
