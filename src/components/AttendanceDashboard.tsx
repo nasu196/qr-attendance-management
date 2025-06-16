@@ -21,7 +21,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
         errors.push("24時間以上の勤務");
       }
       if (workHours < 0) {
-        errors.push("退勤時刻が出勤時刻より早い");
+        errors.push("データエラー");
       }
     }
     

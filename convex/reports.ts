@@ -14,8 +14,9 @@ export const getPeriodReport = query({
       throw new Error("認証が必要です");
     }
 
-    const startOfPeriod = new Date(args.startDate + 'T00:00:00').getTime();
-    const endOfPeriod = new Date(args.endDate + 'T23:59:59').getTime();
+    // JST基準で期間の開始・終了を計算
+    const startOfPeriod = new Date(args.startDate + 'T00:00:00+09:00').getTime();
+    const endOfPeriod = new Date(args.endDate + 'T23:59:59+09:00').getTime();
 
     // スタッフ一覧を取得
     const staffList = await ctx.db
@@ -37,7 +38,6 @@ export const getPeriodReport = query({
     let totalHours = 0;
     let totalWorkDays = 0;
     let totalOvertimeHours = 0;
-    let totalLateEarly = 0;
 
     for (const staff of staffList) {
       const staffAttendance = attendanceRecords.filter(a => a.staffId === staff._id);
@@ -45,8 +45,9 @@ export const getPeriodReport = query({
       // 日付ごとにグループ化
       const dailyRecords = new Map();
       staffAttendance.forEach(record => {
-        const date = new Date(record.timestamp);
-        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        // UTCタイムスタンプをJSTに変換してから日付を計算
+        const jstDate = new Date(record.timestamp + 9 * 60 * 60 * 1000);
+        const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
         
         if (!dailyRecords.has(dateKey)) {
           dailyRecords.set(dateKey, { date: dateKey, clockIn: null, clockOut: null });
@@ -67,8 +68,15 @@ export const getPeriodReport = query({
 
       Array.from(dailyRecords.values()).forEach(day => {
         if (day.clockIn && day.clockOut) {
-          workDays++;
           const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
+          
+          // 負の値や異常値をチェック
+          if (dayMinutes < 0 || dayMinutes > 24 * 60) {
+            // データエラーの場合はスキップ
+            return;
+          }
+          
+          workDays++;
           staffTotalMinutes += dayMinutes;
           
           // 8時間を超える場合は残業
@@ -90,8 +98,6 @@ export const getPeriodReport = query({
         workDays,
         totalHours: `${staffTotalHours}時間${staffTotalMins}分`,
         overtimeHours: `${staffOvertimeHrs}時間${staffOvertimeMins}分`,
-        lateCount: 0, // 遅刻判定は廃止
-        earlyCount: 0, // 早退判定は廃止
       });
 
       // 全体統計に加算
@@ -111,9 +117,7 @@ export const getPeriodReport = query({
         totalHours: `${totalHrs}時間${totalMins}分`,
         totalWorkDays,
         totalOvertimeHours: `${totalOvertimeHrs}時間${totalOvertimeMins}分`,
-        totalLateEarly: 0, // 遅刻・早退判定は廃止
         totalStaff: staffList.length,
-        averageVacationDays: 0, // 有給機能は今回は簡略化
       },
       staffReports,
       period: {

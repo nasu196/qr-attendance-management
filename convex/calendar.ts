@@ -47,8 +47,9 @@ export const getMonthlyCalendar = query({
     // 退勤記録をマップ化
     const clockOutMap = new Map<string, any>();
     clockOutRecords.forEach(record => {
-      const date = new Date(record.timestamp);
-      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      // UTCタイムスタンプをJSTに変換してから日付を計算
+      const jstDate = new Date(record.timestamp + 9 * 60 * 60 * 1000);
+      const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
       const key = `${record.staffId}-${dateKey}`;
       clockOutMap.set(key, record);
     });
@@ -56,8 +57,9 @@ export const getMonthlyCalendar = query({
     // 日付ごとにグループ化
     const recordsByDate = new Map<string, any[]>();
     clockInRecords.forEach(record => {
-      const date = new Date(record.timestamp);
-      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      // UTCタイムスタンプをJSTに変換してから日付を計算
+      const jstDate = new Date(record.timestamp + 9 * 60 * 60 * 1000);
+      const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
       
       if (!recordsByDate.has(dateKey)) {
         recordsByDate.set(dateKey, []);

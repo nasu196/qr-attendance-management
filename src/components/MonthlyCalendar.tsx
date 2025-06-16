@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
+import { formatToJST } from "@/lib/timezone";
 
 interface MonthlyCalendarProps {
   isPremium: boolean;
@@ -12,6 +13,14 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // React Hooksは必ず条件分岐の外で呼ぶ
+  const staffList = useQuery(api.staff.getStaffList);
+  const allUsedTags = useQuery(api.staff.getAllUsedTags);
+  const calendarData = useQuery(api.calendar.getMonthlyCalendar, {
+    year: currentDate.year,
+    month: currentDate.month,
+  });
 
   if (!isPremium) {
     return (
@@ -69,13 +78,6 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
     );
   }
 
-  const staffList = useQuery(api.staff.getStaffList);
-  const allUsedTags = useQuery(api.staff.getAllUsedTags);
-  const calendarData = useQuery(api.calendar.getMonthlyCalendar, {
-    year: currentDate.year,
-    month: currentDate.month,
-  });
-
   if (calendarData === undefined || staffList === undefined) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -114,11 +116,8 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
   };
 
   const formatTime = (timestamp: number) => {
-    // JST表示
-    const date = new Date(timestamp);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+    // UTCタイムスタンプをJSTに変換して表示
+    return formatToJST(timestamp, "HH:mm");
   };
 
   // タグでフィルタリングされたスタッフ一覧
@@ -287,7 +286,13 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
                                 )}
                                 {dayData.clockIn && dayData.clockOut && (
                                   <div className="text-xs text-gray-500">
-                                    {Math.round((dayData.clockOut.timestamp - dayData.clockIn.timestamp) / (1000 * 60 * 60) * 10) / 10}h
+                                    {(() => {
+                                      const hours = (dayData.clockOut.timestamp - dayData.clockIn.timestamp) / (1000 * 60 * 60);
+                                      if (hours < 0 || hours > 24) {
+                                        return "データエラー";
+                                      }
+                                      return `${Math.round(hours * 10) / 10}h`;
+                                    })()}
                                   </div>
                                 )}
                               </div>

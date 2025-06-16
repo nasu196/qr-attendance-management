@@ -41,6 +41,8 @@ const applicationTables = {
 
   attendanceHistory: defineTable({
     attendanceId: v.id("attendance"),
+    pairId: v.optional(v.string()),
+    recordType: v.optional(v.union(v.literal("clock_in"), v.literal("clock_out"))),
     oldTimestamp: v.optional(v.number()),
     newTimestamp: v.optional(v.number()),
     oldNote: v.optional(v.string()),
@@ -49,6 +51,7 @@ const applicationTables = {
     modifiedAt: v.number(),
   })
     .index("by_attendance", ["attendanceId"])
+    .index("by_pair", ["pairId"])
     .index("by_modified_by", ["modifiedBy"]),
 
   qrAttendanceUrls: defineTable({

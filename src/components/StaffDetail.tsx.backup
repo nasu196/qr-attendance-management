@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { toast } from "sonner";
 import { formatToJST, convertToUTC, getStartOfJSTDay, getEndOfJSTDay } from "@/lib/timezone";
@@ -16,7 +16,6 @@ interface StaffDetailProps {
 export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMonth }: StaffDetailProps) {
   const staff = useQuery(api.staff.getStaffList)?.find(s => s._id === staffId);
   const correctAttendance = useMutation(api.attendance.correctAttendance);
-  const deletePair = useMutation(api.attendance.deletePair);
   const workSettings = useQuery(api.workSettings.getWorkSettings);
   
   const [currentDate, setCurrentDate] = useState(() => {
@@ -48,24 +47,17 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
 
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [correctionData, setCorrectionData] = useState({
+    id: null as Id<"attendance"> | null,
     date: "",
     type: "clock_in" as "clock_in" | "clock_out",
     time: "",
-    reason: "",
-    pairId: "" as string,
-  });
-
-  // 削除確認モーダル用のstate
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteData, setDeleteData] = useState({
-    pairId: "" as Id<"attendance"> | "",
-    date: "",
     reason: "",
   });
 
   // 新規勤怠記録作成用のstate
   const [showNewRecordModal, setShowNewRecordModal] = useState(false);
   const [newRecordData, setNewRecordData] = useState({
+    id: null as Id<"attendance"> | null,
     date: "",
     type: "clock_in" as "clock_in" | "clock_out",
     time: "",
@@ -73,6 +65,12 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   });
 
   const [selectedSettings, setSelectedSettings] = useState<Map<string, string>>(new Map());
+
+  // 修正履歴を取得
+  const correctionHistory = useQuery(
+    api.attendance.getCorrectionHistory,
+    correctionData.id ? { attendanceId: correctionData.id } : "skip"
+  );
 
   // 出勤と退勤が両方揃った時に自動割り当てを実行（初回のみ）
   const handleAutoAssign = async (date: string, workMinutes: number) => {
@@ -92,62 +90,48 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     }
   };
 
-  // 夜勤対応：出勤と退勤をペアリング（日付をまたぐシフト・同日複数勤務に対応）
-  const createAttendancePairs = (records: any[]) => {
-    if (!records || records.length === 0) return [];
+  // 出勤基準のペアリングロジック
+  const createAttendancePairs = () => {
+    if (!monthlyAttendance) return [];
     
-    // 時系列順にソート
-    const sortedRecords = [...records].sort((a, b) => a.timestamp - b.timestamp);
-    const pairs = [];
-    const usedRecords = new Set();
+    const pairs: any[] = [];
+    const unpaired: any[] = [];
     
-    for (let i = 0; i < sortedRecords.length; i++) {
-      const current = sortedRecords[i];
-      
-      // 既に使用済みの記録はスキップ
-      if (usedRecords.has(current._id)) continue;
-      
-      if (current.type === "clock_in") {
-        // 出勤記録の場合、次の未使用の退勤記録を探す
-        let clockOut = null;
-        for (let j = i + 1; j < sortedRecords.length; j++) {
-          if (sortedRecords[j].type === "clock_out" && !usedRecords.has(sortedRecords[j]._id)) {
-            clockOut = sortedRecords[j];
-            usedRecords.add(sortedRecords[j]._id);
-            break;
-          }
+    // 全記録を時系列順にソート
+    const sortedRecords = [...monthlyAttendance].sort((a, b) => a.timestamp - b.timestamp);
+    
+    for (const record of sortedRecords) {
+      if (record.type === "clock_in") {
+        // 出勤記録を未ペア配列に追加
+        unpaired.push(record);
+      } else if (record.type === "clock_out") {
+        // 退勤記録が来たら最も古い未ペア出勤とペアリング
+        if (unpaired.length > 0) {
+          const clockInRecord = unpaired.shift();
+          const clockInDate = formatToJST(clockInRecord.timestamp, "yyyy-MM-dd");
+          pairs.push({
+            date: clockInDate,
+            clockIn: { timestamp: clockInRecord.timestamp, id: clockInRecord._id },
+            clockOut: { timestamp: record.timestamp, id: record._id }
+          });
         }
-        
-        // ペアを作成（退勤がない場合もペアとして扱う）
-        const clockInDate = formatToJST(current.timestamp, "yyyy-MM-dd");
-        const clockInTime = formatToJST(current.timestamp, "HH:mm");
-        
-        pairs.push({
-          date: clockInDate, // 出勤日を基準日とする
-          displayTime: clockInTime, // 表示用の時刻（同日複数勤務の区別用）
-          clockIn: { timestamp: current.timestamp, id: current._id },
-          clockOut: clockOut ? { timestamp: clockOut.timestamp, id: clockOut._id } : null
-        });
-        
-        usedRecords.add(current._id);
       }
     }
     
-    // 出勤日時順でソート（同日の場合は出勤時刻順）
-    return pairs.sort((a, b) => {
-      const dateCompare = a.date.localeCompare(b.date);
-      if (dateCompare !== 0) return dateCompare;
-      return a.clockIn.timestamp - b.clockIn.timestamp;
-    });
+    // 未ペアの出勤記録も追加（退勤なし）
+    for (const record of unpaired) {
+      const clockInDate = formatToJST(record.timestamp, "yyyy-MM-dd");
+      pairs.push({
+        date: clockInDate,
+        clockIn: { timestamp: record.timestamp, id: record._id },
+        clockOut: null
+      });
+    }
+    
+    return pairs.sort((a, b) => a.date.localeCompare(b.date));
   };
 
-  const dailyAttendance = createAttendancePairs(monthlyAttendance || []);
-
-  // 修正履歴を取得（ペアベース）- 固定のペアIDを使用
-  const correctionHistory = useQuery(
-    api.attendance.getCorrectionHistory,
-    correctionData.pairId ? { pairId: correctionData.pairId } : "skip"
-  );
+  const dailyAttendance = createAttendancePairs();
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -258,12 +242,12 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       const workMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
       const workHours = workMinutes / 60;
       
-      // 夜勤対応：48時間制限に変更
       if (workHours >= 48) {
         errors.push("48時間以上の勤務");
       }
+      // ペアリング方式では基本的に負の値は発生しないが、念のためチェック
       if (workHours < 0) {
-        errors.push("退勤時刻が出勤時刻より早い");
+        errors.push("データエラー");
       }
       
       // 適用設定より勤務時間が短い場合のエラー
@@ -283,12 +267,12 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     if (!monthlyAttendance) return new Map();
     
     const consecutiveErrors = new Map();
-    const allRecords: Array<{ pairId: string; timestamp: number; type: 'clock_in' | 'clock_out' }> = [];
+    const allRecords: Array<{ date: string; timestamp: number; type: 'clock_in' | 'clock_out' }> = [];
     
-    dailyAttendance.forEach((day, index) => {
-      const pairId = day.clockIn ? day.clockIn.id : `pair-${index}`;
-      if (day.clockIn) allRecords.push({ pairId, timestamp: day.clockIn.timestamp, type: 'clock_in' });
-      if (day.clockOut) allRecords.push({ pairId, timestamp: day.clockOut.timestamp, type: 'clock_out' });
+    // ペアリング済みデータから全記録を抽出
+    dailyAttendance.forEach(day => {
+      if (day.clockIn) allRecords.push({ date: day.date, timestamp: day.clockIn.timestamp, type: 'clock_in' });
+      if (day.clockOut) allRecords.push({ date: day.date, timestamp: day.clockOut.timestamp, type: 'clock_out' });
     });
     
     allRecords.sort((a, b) => a.timestamp - b.timestamp);
@@ -297,8 +281,9 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       const current = allRecords[i];
       const next = allRecords[i + 1];
       
-      if (current.type === next.type) {
-        consecutiveErrors.set(next.pairId, current.type === 'clock_in' ? "連続出勤打刻" : "連続退勤打刻");
+      if (current.type === next.type && current.type === 'clock_in') {
+        // 出勤の連続のみエラーとして検出（ペアリング方式では退勤の連続は基本的に発生しない）
+        consecutiveErrors.set(next.date, "連続出勤打刻");
       }
     }
     
@@ -319,8 +304,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       );
     });
     
-    const pairId = day.clockIn ? day.clockIn.id : `pair-${day.date}`;
-    const consecutiveError = consecutiveErrors.get(pairId);
+    const consecutiveError = consecutiveErrors.get(day.date);
     if (consecutiveError) {
       badges.push(
         <span key="consecutive" className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -344,6 +328,15 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   const calculateWorkingHours = (clockIn: any, clockOut: any) => {
     if (!clockIn || !clockOut) return null;
     const totalMinutes = (clockOut.timestamp - clockIn.timestamp) / (1000 * 60);
+    
+    // ペアリング方式では基本的に負の値は発生しないが、念のためチェック
+    if (totalMinutes < 0) {
+      return "データエラー";
+    }
+    if (totalMinutes > 48 * 60) { // 48時間以上は異常
+      return "データエラー";
+    }
+    
     const hours = Math.floor(totalMinutes / 60);
     const minutes = Math.floor(totalMinutes % 60);
     return `${hours}時間${minutes}分`;
@@ -418,7 +411,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
 
   const exportToCSV = () => {
     if (!dailyAttendance?.length) return toast.error("出力するデータがありません");
-    const csvData = [["日付", "曜日", "開始時刻", "出勤時刻", "退勤時刻", "勤務時間", "適用設定", "残業時間"]];
+    const csvData = [["日付", "曜日", "出勤時刻", "退勤時刻", "勤務時間", "適用設定", "残業時間"]];
     dailyAttendance.forEach(day => {
       const date = new Date(day.date);
       let appliedSetting = "";
@@ -449,8 +442,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       
       csvData.push([
         day.date, 
-        date.toLocaleDateString("ja-JP", { weekday: "short" }),
-        day.displayTime || "",
+        date.toLocaleDateString("ja-JP", { weekday: "short" }), 
         day.clockIn ? formatTime(day.clockIn.timestamp) : "",
         day.clockOut ? formatTime(day.clockOut.timestamp) : "",
         calculateWorkingHours(day.clockIn, day.clockOut) || "",
@@ -468,96 +460,70 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     toast.success("CSVファイルをダウンロードしました");
   };
 
-  const openCorrectionModal = (day?: any) => {
-    let initialType: "clock_in" | "clock_out" = "clock_in";
-    let initialTime = "";
-    let initialDate = "";
-    let pairId = "";
-    
-    if (day && typeof day === 'object') {
-      // ペアIDを設定（出勤記録のIDを使用）
-      pairId = day.clockIn?.id || "";
-      
-      // 出勤記録がある場合は出勤を優先、なければ退勤を選択
-      if (day.clockIn) {
-        initialType = "clock_in";
-        initialTime = formatToJST(day.clockIn.timestamp, "HH:mm");
-        // 出勤の場合は表示されている日付（day.date）を使用
-        initialDate = day.date;
-      } else if (day.clockOut) {
-        initialType = "clock_out";
-        initialTime = formatToJST(day.clockOut.timestamp, "HH:mm");
-        // 退勤の場合は実際の退勤日付を計算
-        initialDate = formatToJST(day.clockOut.timestamp, "yyyy-MM-dd");
-      }
-    }
+  const openCorrectionModal = (day: any) => {
+    // 修正モーダルを開く際に、どの打刻を修正対象とするか設定
+    const targetRecord = day.clockIn || day.clockOut;
+    if (!targetRecord) return;
     
     setCorrectionData({
-      date: initialDate || day?.date || `${currentDate.year}-${String(currentDate.month).padStart(2, '0')}-01`,
-      type: initialType,
-      time: initialTime,
+      id: targetRecord.id, // 修正対象のIDを保持
+      date: day.date,
+      type: "clock_in",
+      time: "",
       reason: "",
-      pairId,
     });
     setShowCorrectionModal(true);
-  };
-
-  const openDeleteModal = (day: any) => {
-    if (!day.clockIn) {
-      toast.error("削除対象のペアが見つかりません");
-      return;
-    }
-    
-    setDeleteData({
-      pairId: day.clockIn.id,
-      date: day.date,
-      reason: "",
-    });
-    setShowDeleteModal(true);
-  };
-
-  const closeDeleteModal = () => {
-    setShowDeleteModal(false);
-    setDeleteData({
-      pairId: "",
-      date: "",
-      reason: "",
-    });
-  };
-
-  const handleDeleteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!deleteData.pairId) {
-      toast.error("削除対象が選択されていません");
-      return;
-    }
-    if (!deleteData.reason.trim()) {
-      toast.error("削除理由を入力してください");
-      return;
-    }
-
-    try {
-      await deletePair({
-        pairId: deleteData.pairId,
-        reason: deleteData.reason,
-      });
-      toast.success("勤怠ペアを削除しました");
-      closeDeleteModal();
-    } catch (error) {
-      toast.error("削除に失敗しました");
-    }
   };
 
   const closeCorrectionModal = () => {
     setShowCorrectionModal(false);
     setCorrectionData({
+      id: null,
       date: "",
       type: "clock_in",
       time: "",
       reason: "",
-      pairId: "",
     });
+  };
+
+  // 連続打刻バリデーション関数
+  const validateConsecutiveAttendance = (date: string, time: string, type: "clock_in" | "clock_out", excludeId?: Id<"attendance">) => {
+    if (!monthlyAttendance) return { isValid: true, message: "" };
+    
+    // 新しい打刻のタイムスタンプを計算
+    const newTimestamp = new Date(`${date}T${time}:00+09:00`).getTime();
+    
+    // 全記録を時系列順にソート（除外IDの記録は除く）
+    const filteredRecords = excludeId
+      ? monthlyAttendance.filter(record => record._id !== excludeId)
+      : monthlyAttendance;
+    const sortedRecords = [...filteredRecords].sort((a, b) => a.timestamp - b.timestamp);
+    
+    // 新しい記録を挿入する位置を見つける
+    let insertIndex = sortedRecords.findIndex(record => record.timestamp > newTimestamp);
+    if (insertIndex === -1) insertIndex = sortedRecords.length;
+    
+    // 前後の記録をチェック
+    const prevRecord = insertIndex > 0 ? sortedRecords[insertIndex - 1] : null;
+    const nextRecord = insertIndex < sortedRecords.length ? sortedRecords[insertIndex] : null;
+    
+    // 前の記録と同じ種類かチェック
+    if (prevRecord && prevRecord.type === type) {
+      return {
+        isValid: false,
+        message: `${type === 'clock_in' ? '出勤' : '退勤'}が連続しています。前の記録: ${formatToJST(prevRecord.timestamp, "MM/dd HH:mm")}`
+      };
+    }
+    
+    // 次の記録と同じ種類かチェック
+    if (nextRecord && nextRecord.type === type) {
+      return {
+        isValid: false,
+        message: `${type === 'clock_in' ? '出勤' : '退勤'}が連続しています。次の記録: ${formatToJST(nextRecord.timestamp, "MM/dd HH:mm")}`
+      };
+    }
+    
+    return { isValid: true, message: "" };
   };
 
   const handleCorrectionSubmit = async (e: React.FormEvent) => {
@@ -576,31 +542,23 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       return;
     }
 
-    // 既に設定されているペアIDを使用（日付変更時も維持される）
-    const pairId = correctionData.pairId;
-
-    if (!pairId) {
-      toast.error("修正対象のペアが見つかりません");
+    // 連続打刻バリデーション
+    const validation = validateConsecutiveAttendance(correctionData.date, correctionData.time, correctionData.type, correctionData.id || undefined);
+    if (!validation.isValid) {
+      toast.error(validation.message);
       return;
     }
 
     try {
       await correctAttendance({
         staffId,
-        pairId, // 固定されたペアIDを送信
+        attendanceId: correctionData.id || undefined,
         date: correctionData.date,
         type: correctionData.type,
         time: correctionData.time,
         reason: correctionData.reason,
       });
       toast.success("勤怠記録を修正しました");
-      
-      // 修正後は自動割り当てを実行しないよう、手動選択状態にマーク
-      const newSettings = new Map(selectedSettings);
-      if (!newSettings.has(correctionData.date)) {
-        newSettings.set(correctionData.date, 'manual_corrected');
-      }
-      setSelectedSettings(newSettings);
       
       closeCorrectionModal();
     } catch (error) {
@@ -611,6 +569,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   // 新規勤怠記録作成用の関数
   const openNewRecordModal = () => {
     setNewRecordData({
+      id: null, // 新規作成時はIDなし
       date: `${currentDate.year}-${String(currentDate.month).padStart(2, '0')}-01`,
       type: "clock_in",
       time: "",
@@ -622,6 +581,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   const closeNewRecordModal = () => {
     setShowNewRecordModal(false);
     setNewRecordData({
+      id: null,
       date: "",
       type: "clock_in",
       time: "",
@@ -645,9 +605,17 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       return;
     }
 
+    // 連続打刻バリデーション
+    const validation = validateConsecutiveAttendance(newRecordData.date, newRecordData.time, newRecordData.type);
+    if (!validation.isValid) {
+      toast.error(validation.message);
+      return;
+    }
+
     try {
       await correctAttendance({
         staffId,
+        // attendanceIdは渡さない（新規作成）
         date: newRecordData.date,
         type: newRecordData.type,
         time: newRecordData.time,
@@ -835,46 +803,38 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
           ) : (
             <div className="space-y-3">
               {dailyAttendance.map((day) => {
-                const statusBadges = getDayStatusBadges(day);
-                let appliedSetting = "";
-                let overtimeForDay = "";
-                
-                if (day.clockIn && day.clockOut) {
-                  const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
-                  
-                  // 初回のみ自動割り当てを実行（設定がない場合のみ）
-                  if (appliedSettings && !appliedSettings[day.date] && !selectedSettings.has(day.date)) {
-                    void handleAutoAssign(day.date, dayMinutes);
-                  }
-                  
-                  const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
-                  if (appliedSettingObj) {
-                    appliedSetting = appliedSettingObj.name;
-                    const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
-                    if (dayMinutes > standardTotalMinutes) {
-                      const overtimeMin = dayMinutes - standardTotalMinutes;
-                      const overtimeHrs = Math.floor(overtimeMin / 60);
-                      const overtimeMins = Math.floor(overtimeMin % 60);
-                      overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
-                    } else {
-                      overtimeForDay = "0時間0分";
-                    }
-                  } else {
-                    appliedSetting = "—";
-                    overtimeForDay = "—";
-                  }
-                } else {
-                  appliedSetting = "—";
-                  overtimeForDay = "—";
+                const dayMinutes = (day.clockIn && day.clockOut) 
+                  ? (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60) 
+                  : 0;
+
+                // 初回のみ自動割り当てを実行
+                if (day.clockIn && day.clockOut && appliedSettings && !appliedSettings[day.date] && !selectedSettings.has(day.date)) {
+                  void handleAutoAssign(day.date, dayMinutes);
                 }
+
+                const appliedSettingObj = (day.clockIn && day.clockOut) ? getAppliedSetting(day.date, dayMinutes) : null;
+                const appliedSettingName = appliedSettingObj ? appliedSettingObj.name : "—";
                 
+                let overtimeForDay = "—";
+                if (appliedSettingObj && day.clockIn && day.clockOut) {
+                  const standardTotalMinutes = (appliedSettingObj.workHours + appliedSettingObj.breakHours) * 60;
+                  if (dayMinutes > standardTotalMinutes) {
+                    const overtimeMin = dayMinutes - standardTotalMinutes;
+                    const overtimeHrs = Math.floor(overtimeMin / 60);
+                    const overtimeMins = Math.floor(overtimeMin % 60);
+                    overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
+                  } else {
+                    overtimeForDay = "0時間0分";
+                  }
+                }
+
                 return (
                   <div
-                    key={day.clockIn ? day.clockIn.id : `no-clockin-${day.date}`}
+                    key={day.clockIn ? day.clockIn.id : day.date}
                     className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-24 text-sm font-medium text-gray-700 flex-shrink-0">
+                      <div className="w-20 text-sm font-medium text-gray-700 flex-shrink-0">
                         {formatDate(day.date)}
                       </div>
                       <div className="flex items-center gap-6">
@@ -904,7 +864,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                               onChange={(e) => void handleSettingChange(day.date, e.target.value)}
                               className="text-xs font-medium text-blue-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer w-full"
                             >
-                              <option value="auto">{appliedSetting || "—"}</option>
+                              <option value="auto">{appliedSettingName}</option>
                               <option value="null">—（設定なし）</option>
                               {workSettings.map((setting) => (
                                 <option key={setting._id} value={setting._id}>
@@ -916,28 +876,20 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                         )}
                         <div className="w-20 flex-shrink-0">
                           <span className="text-xs text-gray-500">残業時間</span>
-                          <p className="text-sm font-medium text-orange-600">{overtimeForDay || "—"}</p>
+                          <p className="text-sm font-medium text-orange-600">{overtimeForDay}</p>
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <div className="flex flex-wrap gap-1">
-                        {statusBadges}
+                        {getDayStatusBadges(day)}
                       </div>
-                      <div className="flex gap-1 ml-2">
-                        <button 
-                          onClick={() => openCorrectionModal(day)}
-                          className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 border border-blue-300 rounded"
-                        >
-                          修正
-                        </button>
-                        <button 
-                          onClick={() => openDeleteModal(day)}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium px-2 py-1 border border-red-300 rounded"
-                        >
-                          削除
-                        </button>
-                      </div>
+                      <button 
+                        onClick={() => openCorrectionModal(day)}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium ml-2"
+                      >
+                        修正
+                      </button>
                     </div>
                   </div>
                 );
@@ -982,49 +934,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                   </label>
                   <select
                     value={correctionData.type}
-                    onChange={(e) => {
-                      const newType = e.target.value as "clock_in" | "clock_out";
-                      let newTime = "";
-                      let newDate = correctionData.date;
-                      
-                      // 元のペアIDを維持
-                      const originalPairId = correctionData.pairId;
-                      
-                      // 選択された修正対象に応じて時刻、日付を自動入力
-                      // ペアIDが設定されている場合は、そのペアから情報を取得
-                      if (originalPairId) {
-                        const targetDay = dailyAttendance.find(day => day.clockIn?.id === originalPairId);
-                        if (targetDay) {
-                          if (newType === "clock_in" && targetDay.clockIn) {
-                            newTime = formatToJST(targetDay.clockIn.timestamp, "HH:mm");
-                            newDate = targetDay.date;
-                          } else if (newType === "clock_out" && targetDay.clockOut) {
-                            newTime = formatToJST(targetDay.clockOut.timestamp, "HH:mm");
-                            newDate = formatToJST(targetDay.clockOut.timestamp, "yyyy-MM-dd");
-                          }
-                        }
-                      } else {
-                        // ペアIDが未設定の場合は、現在の日付から検索
-                        const selectedDay = dailyAttendance.find(day => day.date === correctionData.date);
-                        if (selectedDay) {
-                          if (newType === "clock_in" && selectedDay.clockIn) {
-                            newTime = formatToJST(selectedDay.clockIn.timestamp, "HH:mm");
-                            newDate = selectedDay.date;
-                          } else if (newType === "clock_out" && selectedDay.clockOut) {
-                            newTime = formatToJST(selectedDay.clockOut.timestamp, "HH:mm");
-                            newDate = formatToJST(selectedDay.clockOut.timestamp, "yyyy-MM-dd");
-                          }
-                        }
-                      }
-                      
-                      setCorrectionData({ 
-                        ...correctionData, 
-                        type: newType,
-                        time: newTime,
-                        date: newDate,
-                        pairId: originalPairId, // 元のペアIDを維持
-                      });
-                    }}
+                    onChange={(e) => setCorrectionData({ ...correctionData, type: e.target.value as "clock_in" | "clock_out" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
@@ -1060,19 +970,18 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                   />
                 </div>
 
-                {/* 過去の変更履歴（ペアベース） */}
+                {/* 過去の変更履歴 */}
                 <div className="border-t pt-4">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">このペアの変更履歴</h3>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">過去の変更履歴</h3>
                   <div className="bg-gray-50 rounded-lg p-3 max-h-32 overflow-y-auto">
                     {correctionHistory && correctionHistory.length > 0 ? (
                       correctionHistory.map((h: any, i: number) => (
                         <div key={i} className="text-xs text-gray-600 mb-2">
-                          <div className="font-medium">
-                            {h.recordType === "clock_in" ? "出勤" : "退勤"}修正: 
-                            {h.oldTimestamp ? formatTime(h.oldTimestamp) : "—"} → {h.newTimestamp ? formatTime(h.newTimestamp) : "削除"}
+                          <div>
+                            {h.oldTimestamp ? formatToJST(h.oldTimestamp, "MM/dd HH:mm") : "—"} → {h.newTimestamp ? formatToJST(h.newTimestamp, "MM/dd HH:mm") : "削除"}
                           </div>
                           <div className="text-gray-500">理由: {h.newNote || "—"}</div>
-                          <div className="text-gray-400">{new Date(h.modifiedAt).toLocaleString("ja-JP")}</div>
+                          <div className="text-gray-400">{formatToJST(h.modifiedAt, "yyyy/MM/dd HH:mm:ss")}</div>
                         </div>
                       ))
                     ) : (
@@ -1199,72 +1108,6 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
           </div>
         </div>
       )}
-
-      {/* 削除確認モーダル */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">勤怠ペア削除確認</h2>
-                <button
-                  onClick={closeDeleteModal}
-                  className="text-gray-400 hover:text-gray-600 text-xl"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              <div className="mb-4">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-center">
-                    <span className="text-red-600 text-2xl mr-3">⚠️</span>
-                    <div>
-                      <h3 className="text-red-800 font-medium">注意</h3>
-                      <p className="text-red-700 text-sm mt-1">
-                        {formatDate(deleteData.date)}の勤怠ペア（出勤・退勤）を完全に削除します。
-                        この操作は取り消すことができません。
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <form onSubmit={(e) => void handleDeleteSubmit(e)} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    削除理由 <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={deleteData.reason}
-                    onChange={(e) => setDeleteData({ ...deleteData, reason: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                    rows={3}
-                    placeholder="例：誤った打刻のため削除"
-                    required
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    削除する
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeDeleteModal}
-                    className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    キャンセル
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-} 
+}

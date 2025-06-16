@@ -16,9 +16,12 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [showCustomModal, setShowCustomModal] = useState(false);
-  const [sortBy, setSortBy] = useState<"name" | "totalHours" | "workDays" | "lateCount">("name");
+  const [sortBy, setSortBy] = useState<"name" | "totalHours" | "workDays">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [selectedStaffId, setSelectedStaffId] = useState<Id<"staff"> | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isPeriodSectionOpen, setIsPeriodSectionOpen] = useState(false);
+  const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
 
   // 期間を計算する関数（修正版）
   const calculatePeriod = (type: PeriodType) => {
@@ -26,47 +29,54 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
     let startDate: string, endDate: string;
 
     switch (type) {
-      case "thisMonth":
+      case "thisMonth": {
         // 今月の1日から月末まで
         const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         startDate = thisMonthStart.toLocaleDateString('sv-SE');
         endDate = thisMonthEnd.toLocaleDateString('sv-SE');
         break;
-      case "lastMonth":
+      }
+      case "lastMonth": {
         // 先月の1日から月末まで
         const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
         startDate = lastMonthStart.toLocaleDateString('sv-SE');
         endDate = lastMonthEnd.toLocaleDateString('sv-SE');
         break;
-      case "thisYear":
+      }
+      case "thisYear": {
         const thisYearStart = new Date(now.getFullYear(), 0, 1);
         const thisYearEnd = new Date(now.getFullYear(), 11, 31);
         startDate = thisYearStart.toLocaleDateString('sv-SE');
         endDate = thisYearEnd.toLocaleDateString('sv-SE');
         break;
-      case "lastYear":
+      }
+      case "lastYear": {
         const lastYearStart = new Date(now.getFullYear() - 1, 0, 1);
         const lastYearEnd = new Date(now.getFullYear() - 1, 11, 31);
         startDate = lastYearStart.toLocaleDateString('sv-SE');
         endDate = lastYearEnd.toLocaleDateString('sv-SE');
         break;
-      case "last12Months":
+      }
+      case "last12Months": {
         const last12Start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
         const last12End = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         startDate = last12Start.toLocaleDateString('sv-SE');
         endDate = last12End.toLocaleDateString('sv-SE');
         break;
+      }
       case "custom":
         startDate = customStartDate;
         endDate = customEndDate;
         break;
-      default:
+      default: {
         const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         startDate = defaultStart.toLocaleDateString('sv-SE');
         endDate = defaultEnd.toLocaleDateString('sv-SE');
+        break;
+      }
     }
 
     return { startDate, endDate };
@@ -74,18 +84,28 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
 
   const { startDate, endDate } = calculatePeriod(periodType);
 
+  // useQueryは常に同じ順序で呼ぶ必要がある
+  const periodReport = useQuery(api.reports.getPeriodReport, 
+    startDate && endDate && isPremium ? { startDate, endDate } : "skip"
+  );
+  const allUsedTags = useQuery(api.staff.getAllUsedTags);
+  const staffList = useQuery(api.staff.getStaffList);
+
   // カスタム期間選択の処理
   const handleCustomPeriodSelect = () => {
     if (!customStartDate || !customEndDate) {
-      toast.error("開始日と終了日を選択してください");
+      toast.error("開始日と終了日の両方を選択してください");
       return;
     }
+    
     if (customStartDate > customEndDate) {
       toast.error("開始日は終了日より前の日付を選択してください");
       return;
     }
+    
     setPeriodType("custom");
     setShowCustomModal(false);
+    toast.success("カスタム期間を設定しました");
   };
 
   const openCustomModal = () => {
@@ -107,6 +127,19 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
     }
   };
 
+  // タグの選択/解除
+  const toggleTag = (tag: string) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(selectedTags.filter(t => t !== tag));
+    } else {
+      setSelectedTags([...selectedTags, tag]);
+    }
+  };
+
+  const clearTagFilter = () => {
+    setSelectedTags([]);
+  };
+
   if (!isPremium) {
     return (
       <div className="space-y-6">
@@ -117,9 +150,9 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
           </div>
         </div>
         
-        <div className="relative bg-white rounded-lg shadow p-6">
+        <div className="relative bg-white rounded-lg shadow">
           {/* ブラー効果のあるダミーコンテンツ */}
-          <div className="filter blur-sm pointer-events-none">
+          <div className="filter blur-sm pointer-events-none p-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-blue-800">総勤務時間</h3>
@@ -138,20 +171,28 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
                 <p className="text-2xl font-bold text-purple-900">8名</p>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3 mb-6">
               <div className="h-4 bg-gray-200 rounded"></div>
               <div className="h-4 bg-gray-200 rounded w-3/4"></div>
               <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+              <div className="h-4 bg-gray-200 rounded w-4/5"></div>
+            </div>
+            <div className="space-y-3">
+              <div className="h-8 bg-gray-200 rounded"></div>
+              <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+              <div className="h-6 bg-gray-200 rounded w-1/2"></div>
+              <div className="h-6 bg-gray-200 rounded w-5/6"></div>
             </div>
           </div>
           
           {/* オーバーレイメッセージ */}
-          <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
-            <div className="text-center">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/85 rounded-lg p-6">
+            <div className="text-center max-w-md mx-auto">
               <span className="text-gray-400 text-4xl">📈</span>
-              <p className="text-gray-700 font-medium mt-4">月次レポート機能は有料プランでご利用いただけます</p>
-              <p className="text-gray-500 text-sm mt-2">左下の開発用スイッチで有料プランに切り替えてお試しください</p>
-              <div className="mt-4 space-y-2 text-sm text-gray-600">
+              <p className="text-gray-700 font-medium mt-4 mb-2">月次レポート機能は有料プランでご利用いただけます</p>
+              <p className="text-gray-500 text-sm mb-4">左下の開発用スイッチで有料プランに切り替えてお試しください</p>
+              <div className="mt-4 space-y-1 text-sm text-gray-600">
                 <p>✓ 期間選択機能（今月、先月、今年、去年、直近1年間、カスタム期間）</p>
                 <p>✓ スタッフ別詳細レポート</p>
                 <p>✓ CSVエクスポート機能</p>
@@ -163,11 +204,6 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
       </div>
     );
   }
-
-  // useQueryは常に同じ順序で呼ぶ必要がある
-  const periodReport = useQuery(api.reports.getPeriodReport, 
-    startDate && endDate ? { startDate, endDate } : "skip"
-  );
 
   // スタッフ詳細表示中の場合
   if (selectedStaffId) {
@@ -204,8 +240,17 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
     );
   }
 
-  // ソート機能
-  const sortedStaffReports = [...(periodReport?.staffReports || [])].sort((a, b) => {
+  // ソート機能（タグフィルタリング込み）
+  const sortedStaffReports = [...(periodReport?.staffReports || [])]
+    .filter(staff => {
+      // タグフィルタリング
+      if (selectedTags.length === 0) return true;
+      // スタッフ情報を取得してタグをチェック
+      const staffInfo = staffList?.find(s => s.name === staff.name);
+      if (!staffInfo || !staffInfo.tags) return false;
+      return staffInfo.tags.some(tag => selectedTags.includes(tag));
+    })
+    .sort((a, b) => {
     let aValue: any, bValue: any;
     
     switch (sortBy) {
@@ -220,10 +265,6 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
       case "workDays":
         aValue = a.workDays;
         bValue = b.workDays;
-        break;
-      case "lateCount":
-        aValue = a.lateCount;
-        bValue = b.lateCount;
         break;
       default:
         aValue = a.name;
@@ -258,7 +299,7 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
     const csvData = [
       ["期間", `${startDate} ～ ${endDate}`],
       [""],
-      ["スタッフ名", "職員番号", "出勤日数", "総勤務時間", "残業時間", "遅刻回数", "早退回数"]
+      ["スタッフ名", "職員番号", "出勤日数", "総勤務時間", "残業時間"]
     ];
     
     sortedStaffReports.forEach(staff => {
@@ -267,9 +308,7 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
         staff.employeeId,
         staff.workDays.toString(),
         staff.totalHours,
-        staff.overtimeHours,
-        staff.lateCount.toString(),
-        staff.earlyCount.toString()
+        staff.overtimeHours
       ]);
     });
     
@@ -280,7 +319,6 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
       ["総勤務時間", periodReport.summary.totalHours],
       ["総出勤日数", `${periodReport.summary.totalWorkDays}日`],
       ["総残業時間", periodReport.summary.totalOvertimeHours],
-      ["遅刻・早退回数", `${periodReport.summary.totalLateEarly}回`],
       ["対象スタッフ数", `${periodReport.summary.totalStaff}名`]
     );
     
@@ -320,47 +358,121 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
         </div>
       </div>
 
-      {/* 期間選択 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">期間選択</h2>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4">
-          {[
-            { value: "thisMonth", label: "今月" },
-            { value: "lastMonth", label: "先月" },
-            { value: "thisYear", label: "今年" },
-            { value: "lastYear", label: "去年" },
-            { value: "last12Months", label: "直近1年" },
-            { value: "custom", label: "カスタム" }
-          ].map((option) => (
-            <button
-              key={option.value}
-              onClick={() => {
-                if (option.value === "custom") {
-                  openCustomModal();
-                } else {
-                  setPeriodType(option.value as PeriodType);
-                }
-              }}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                periodType === option.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 flex justify-between items-center">
-          <div className="text-sm text-gray-600">
-            対象期間: {startDate} ～ {endDate}
+      {/* 期間選択（アコーディオン） */}
+      <div className="bg-white rounded-lg shadow">
+        <button
+          onClick={() => setIsPeriodSectionOpen(!isPeriodSectionOpen)}
+          className="w-full px-6 py-4 flex justify-between items-center text-left hover:bg-gray-50 transition-colors"
+        >
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">期間選択</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              対象期間: {startDate} ～ {endDate}
+            </p>
           </div>
-
+          <div className={`transform transition-transform duration-300 ease-in-out ${isPeriodSectionOpen ? 'rotate-180' : ''}`}>
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </button>
+        
+        <div 
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${
+            isPeriodSectionOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          }`}
+        >
+          <div className="px-6 pb-6 border-t border-gray-200">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mt-4">
+              {[
+                { value: "thisMonth", label: "今月" },
+                { value: "lastMonth", label: "先月" },
+                { value: "thisYear", label: "今年" },
+                { value: "lastYear", label: "去年" },
+                { value: "last12Months", label: "直近1年" },
+                { value: "custom", label: "カスタム" }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    if (option.value === "custom") {
+                      setShowCustomModal(true);
+                    } else {
+                      setPeriodType(option.value as PeriodType);
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    periodType === option.value
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-
-
       </div>
+
+      {/* タグフィルター（アコーディオン） */}
+      {allUsedTags && allUsedTags.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <button
+            onClick={() => setIsTagFilterOpen(!isTagFilterOpen)}
+            className="w-full px-6 py-4 flex justify-between items-center text-left hover:bg-gray-50 transition-colors"
+          >
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">タグフィルター</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                {selectedTags.length === 0 
+                  ? "すべてのスタッフを表示" 
+                  : `${selectedTags.join(", ")} のスタッフを表示`
+                }
+              </p>
+            </div>
+            <div className={`transform transition-transform duration-300 ease-in-out ${isTagFilterOpen ? 'rotate-180' : ''}`}>
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+          
+          <div 
+            className={`overflow-hidden transition-all duration-300 ease-in-out ${
+              isTagFilterOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+            }`}
+          >
+            <div className="px-6 pb-6 border-t border-gray-200">
+              <div className="flex flex-wrap gap-2 mt-4">
+                <button 
+                  onClick={clearTagFilter} 
+                  className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                    selectedTags.length === 0 
+                      ? "bg-blue-600 text-white" 
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  すべて
+                </button>
+                {allUsedTags.map((tag) => (
+                  <button 
+                    key={tag} 
+                    onClick={() => toggleTag(tag)} 
+                    className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                      selectedTags.includes(tag)
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* カスタム期間選択モーダル */}
       {showCustomModal && (
@@ -422,137 +534,159 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
           </div>
         </div>
       )}
-      
-      {/* サマリーカード */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-blue-800">総勤務時間</h3>
-          <p className="text-2xl font-bold text-blue-900">{periodReport?.summary.totalHours || "0時間0分"}</p>
-        </div>
-        <div className="bg-green-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-green-800">総出勤日数</h3>
-          <p className="text-2xl font-bold text-green-900">{periodReport?.summary.totalWorkDays || 0}日</p>
-        </div>
-        <div className="bg-orange-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-orange-800">総残業時間</h3>
-          <p className="text-2xl font-bold text-orange-900">{periodReport?.summary.totalOvertimeHours || "0時間0分"}</p>
-        </div>
-        <div className="bg-red-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-red-800">遅刻・早退</h3>
-          <p className="text-2xl font-bold text-red-900">{periodReport?.summary.totalLateEarly || 0}回</p>
-        </div>
-        <div className="bg-purple-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-purple-800">対象スタッフ</h3>
-          <p className="text-2xl font-bold text-purple-900">{periodReport?.summary.totalStaff || 0}名</p>
-        </div>
-        <div className="bg-indigo-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-indigo-800">平均有給取得</h3>
-          <p className="text-2xl font-bold text-indigo-900">{periodReport?.summary.averageVacationDays || 0}日</p>
-        </div>
-      </div>
 
-      {/* スタッフ別レポート */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-900">スタッフ別勤怠レポート</h2>
-            <div className="text-sm text-gray-500">
-              {sortedStaffReports.length}名のスタッフ
-              {(periodType === "thisMonth" || periodType === "lastMonth") && (
-                <span className="ml-2 text-blue-600">（スタッフ名をクリックで詳細表示）</span>
-              )}
+      {periodReport ? (
+        <>
+          {/* サマリーカード */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <span className="text-blue-600 text-xl">⏰</span>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">総勤務時間</p>
+                  <p className="text-2xl font-bold text-gray-900">{periodReport.summary.totalHours}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <span className="text-green-600 text-xl">📊</span>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">総勤務日数</p>
+                  <p className="text-2xl font-bold text-gray-900">{periodReport.summary.totalWorkDays}日</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <span className="text-orange-600 text-xl">⏱️</span>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">総残業時間</p>
+                  <p className="text-2xl font-bold text-gray-900">{periodReport.summary.totalOvertimeHours}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <span className="text-purple-600 text-xl">👥</span>
+                </div>
+                                 <div className="ml-4">
+                   <p className="text-sm font-medium text-gray-600">スタッフ数</p>
+                   <p className="text-2xl font-bold text-gray-900">{periodReport.summary.totalStaff}名</p>
+                 </div>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <div className="p-6">
-          {sortedStaffReports.length === 0 ? (
-            <div className="text-center py-8">
-              <span className="text-gray-400 text-4xl">📊</span>
-              <p className="text-gray-500 mt-4">この期間の勤怠データがありません</p>
+
+          {/* スタッフ別詳細表 */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">スタッフ別詳細</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={exportToCSV}
+                  className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors"
+                >
+                  CSV出力
+                </button>
+                <select
+                  value={`${sortBy}-${sortOrder}`}
+                  onChange={(e) => {
+                    const [sort, order] = e.target.value.split('-');
+                    setSortBy(sort as "name" | "totalHours" | "workDays");
+                    setSortOrder(order as "asc" | "desc");
+                  }}
+                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                >
+                  <option value="name-asc">名前 (昇順)</option>
+                  <option value="name-desc">名前 (降順)</option>
+                  <option value="totalHours-asc">勤務時間 (昇順)</option>
+                  <option value="totalHours-desc">勤務時間 (降順)</option>
+                  <option value="workDays-asc">勤務日数 (昇順)</option>
+                  <option value="workDays-desc">勤務日数 (降順)</option>
+                </select>
+              </div>
             </div>
-          ) : (
+
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th 
-                      className="text-left py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleSort("name")}
-                    >
-                      スタッフ名 {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      スタッフ名
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">職員番号</th>
-                    <th 
-                      className="text-center py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleSort("workDays")}
-                    >
-                      出勤日数 {sortBy === "workDays" && (sortOrder === "asc" ? "↑" : "↓")}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      総勤務時間
                     </th>
-                    <th 
-                      className="text-center py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleSort("totalHours")}
-                    >
-                      総勤務時間 {sortBy === "totalHours" && (sortOrder === "asc" ? "↑" : "↓")}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      総勤務日数
                     </th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">残業時間</th>
-                    <th 
-                      className="text-center py-3 px-4 font-medium text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleSort("lateCount")}
-                    >
-                      遅刻 {sortBy === "lateCount" && (sortOrder === "asc" ? "↑" : "↓")}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      総残業時間
                     </th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-700">早退</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      詳細
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white divide-y divide-gray-200">
                   {sortedStaffReports.map((staff) => (
-                    <tr key={staff.staffId} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <tr key={staff.name} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
                             <span className="text-blue-600 font-semibold text-sm">
                               {staff.name.charAt(0)}
                             </span>
                           </div>
-                          {(periodType === "thisMonth" || periodType === "lastMonth") ? (
-                            <button
-                              onClick={() => handleStaffClick(staff.staffId)}
-                              className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                            >
-                              {staff.name}
-                            </button>
-                          ) : (
-                            <span>{staff.name}</span>
-                          )}
+                          <div className="text-sm font-medium text-gray-900">{staff.name}</div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-gray-600">{staff.employeeId}</td>
-                      <td className="py-3 px-4 text-center">{staff.workDays}日</td>
-                      <td className="py-3 px-4 text-center font-medium">{staff.totalHours}</td>
-                      <td className="py-3 px-4 text-center text-orange-600">{staff.overtimeHours}</td>
-                      <td className="py-3 px-4 text-center">
-                        {staff.lateCount > 0 ? (
-                          <span className="text-red-600 font-medium">{staff.lateCount}回</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {staff.totalHours}
                       </td>
-                      <td className="py-3 px-4 text-center">
-                        {staff.earlyCount > 0 ? (
-                          <span className="text-yellow-600 font-medium">{staff.earlyCount}回</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {staff.workDays}日
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-600">
+                        {staff.overtimeHours}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => {
+                            const staffInfo = staffList?.find(s => s.name === staff.name);
+                            if (staffInfo) {
+                              setSelectedStaffId(staffInfo._id);
+                            }
+                          }}
+                          className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          詳細表示
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
+          </div>
+        </>
+      ) : (
+        <div className="bg-white rounded-lg shadow p-8 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="text-gray-500 mt-4">レポートを生成中...</p>
         </div>
-      </div>
+      )}
     </div>
   );
 }
