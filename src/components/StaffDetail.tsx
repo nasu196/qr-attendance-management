@@ -924,20 +924,43 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <div className="flex flex-wrap gap-1">
-                        {statusBadges}
+                    <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+                      {/* エラーバッジ表示領域を固定幅に制限し、右詰めで表示 */}
+                      <div className="w-64 flex-shrink-0 flex justify-end items-center">
+                        {statusBadges.length <= 2 ? (
+                          // エラーが2個以下の場合は横並び表示
+                          <div className="flex flex-wrap gap-1">
+                            {statusBadges}
+                          </div>
+                        ) : (
+                          // エラーが3個以上の場合は省略表示
+                          <div className="relative group">
+                            <div className="flex gap-1">
+                              {statusBadges.slice(0, 2)}
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 cursor-pointer">
+                                +{statusBadges.length - 2}個
+                              </span>
+                            </div>
+                            {/* ホバー時に全エラーを表示 */}
+                            <div className="absolute top-full right-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2 hidden group-hover:block min-w-max">
+                              <div className="flex flex-col gap-1">
+                                {statusBadges}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex gap-1 ml-2">
+                      {/* 修正・削除ボタンを右端に固定 */}
+                      <div className="flex gap-1 ml-2 flex-shrink-0">
                         <button 
                           onClick={() => openCorrectionModal(day)}
-                          className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 border border-blue-300 rounded"
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 border border-blue-300 rounded whitespace-nowrap"
                         >
                           修正
                         </button>
                         <button 
                           onClick={() => openDeleteModal(day)}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium px-2 py-1 border border-red-300 rounded"
+                          className="text-red-600 hover:text-red-800 text-xs font-medium px-2 py-1 border border-red-300 rounded whitespace-nowrap"
                         >
                           削除
                         </button>
