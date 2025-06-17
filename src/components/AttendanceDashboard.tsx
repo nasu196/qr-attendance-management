@@ -98,6 +98,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     type: "clock_in" as "clock_in" | "clock_out",
     time: "",
     reason: "",
+    pairId: "",
   });
 
   // 修正履歴を取得（AttendanceDashboardでは一時的に無効化）
@@ -119,14 +120,35 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     return `${hours}:${minutes}`;
   };
 
-  const openCorrectionModal = (staffId: string, staffName: string) => {
+  const openCorrectionModal = (staffId: string, staffName: string, attendance?: any) => {
     const today = new Date();
+    
+    // 出勤記録からペアIDを取得
+    let pairId = "";
+    let initialType: "clock_in" | "clock_out" = "clock_in";
+    let initialTime = "";
+    
+    if (attendance) {
+      // 出勤記録がある場合はそのIDをペアIDとして使用
+      if (attendance.clockIn) {
+        pairId = attendance.clockIn._id;
+        initialType = "clock_in";
+        initialTime = formatTime(attendance.clockIn.timestamp);
+      } else if (attendance.clockOut) {
+        // 退勤のみの場合（理論上発生しないが念のため）
+        pairId = attendance.clockOut._id;
+        initialType = "clock_out";
+        initialTime = formatTime(attendance.clockOut.timestamp);
+      }
+    }
+    
     setCorrectionData({
       staffId,
       date: today.toISOString().split('T')[0],
-      type: "clock_in",
-      time: "",
+      type: initialType,
+      time: initialTime,
       reason: "",
+      pairId,
     });
     setShowCorrectionModal(true);
   };
@@ -139,6 +161,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
       type: "clock_in",
       time: "",
       reason: "",
+      pairId: "",
     });
   };
 
@@ -162,6 +185,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     try {
       await correctAttendance({
         staffId: correctionData.staffId as any,
+        pairId: correctionData.pairId || undefined,
         date: correctionData.date,
         type: correctionData.type,
         time: correctionData.time,
@@ -361,7 +385,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
                         </p>
                       </div>
                       <button
-                        onClick={() => openCorrectionModal(attendance.staff._id, attendance.staff.name)}
+                        onClick={() => openCorrectionModal(attendance.staff._id, attendance.staff.name, attendance)}
                         className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                       >
                         修正
@@ -410,7 +434,26 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
                   </label>
                   <select
                     value={correctionData.type}
-                    onChange={(e) => setCorrectionData({ ...correctionData, type: e.target.value as "clock_in" | "clock_out" })}
+                    onChange={(e) => {
+                      const newType = e.target.value as "clock_in" | "clock_out";
+                      let newTime = "";
+                      
+                      // 選択された修正対象に応じて現在の時刻を自動設定
+                      const targetAttendance = presentStaff.find(a => a.staff._id === correctionData.staffId);
+                      if (targetAttendance) {
+                        if (newType === "clock_in" && targetAttendance.clockIn) {
+                          newTime = formatTime(targetAttendance.clockIn.timestamp);
+                        } else if (newType === "clock_out" && targetAttendance.clockOut) {
+                          newTime = formatTime(targetAttendance.clockOut.timestamp);
+                        }
+                      }
+                      
+                      setCorrectionData({ 
+                        ...correctionData, 
+                        type: newType,
+                        time: newTime 
+                      });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >

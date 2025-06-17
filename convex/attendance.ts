@@ -11,10 +11,15 @@ export const getTodayAttendance = query({
       return [];
     }
     
-    // 今日の範囲をUTCで計算
+    // 今日の範囲をJST基準で正しく計算
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1;
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    
+    // JST基準で今日の開始・終了時刻をUTCタイムスタンプに変換
+    const startOfDay = new Date(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+09:00`).getTime();
+    const endOfDay = new Date(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T23:59:59+09:00`).getTime();
 
     const attendanceRecords = await ctx.db
       .query("attendance")
@@ -65,19 +70,31 @@ export const getTodayAttendance = query({
       }
     });
 
-    // スタッフごとに最新のペアを選択（表示用）
+    // スタッフごとに今日の中で最も遅い出勤時刻のペアを選択
     pairsByStaff.forEach((staffPairs, staffId) => {
       const staff = staffMap.get(staffId as any);
       if (!staff) return;
       
-      // 最新の出勤時刻のペアを選択
+      // 今日の出勤記録のうち、出勤日基準で最も遅い時刻のペアを選択
       let latestPair = null;
-      let latestTimestamp = 0;
+      let latestClockInTime = 0;
       
       for (const pair of staffPairs.values()) {
-        if (pair.clockIn && pair.clockIn.timestamp > latestTimestamp) {
-          latestTimestamp = pair.clockIn.timestamp;
-          latestPair = pair;
+        if (pair.clockIn) {
+          // 出勤記録の日付をJST基準で確認
+          const clockInJST = new Date(pair.clockIn.timestamp + 9 * 60 * 60 * 1000);
+          const clockInDateStr = `${clockInJST.getUTCFullYear()}-${String(clockInJST.getUTCMonth() + 1).padStart(2, '0')}-${String(clockInJST.getUTCDate()).padStart(2, '0')}`;
+          const todayDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          
+          // 今日の出勤記録のみを対象とし、その中で最も遅い時刻を選択
+          if (clockInDateStr === todayDateStr) {
+            // 出勤時刻（時:分）で比較するため、日付部分を除いた時刻で比較
+            const timeOfDay = pair.clockIn.timestamp % (24 * 60 * 60 * 1000);
+            if (timeOfDay > latestClockInTime) {
+              latestClockInTime = timeOfDay;
+              latestPair = pair;
+            }
+          }
         }
       }
       

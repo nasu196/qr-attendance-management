@@ -201,12 +201,12 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
     
     // 手動選択を確認（プロプランのみ）
     if (isPremium) {
-      const manualSetting = selectedSettings.get(date);
-      if (manualSetting) {
-        if (manualSetting === 'null') return null;
-        if (workSettings) {
-          const setting = workSettings.find(s => s._id === manualSetting);
-          if (setting) return setting;
+    const manualSetting = selectedSettings.get(date);
+    if (manualSetting) {
+      if (manualSetting === 'null') return null;
+      if (workSettings) {
+        const setting = workSettings.find(s => s._id === manualSetting);
+        if (setting) return setting;
         }
       }
     }
@@ -267,12 +267,12 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       
       // 適用設定より勤務時間が短い場合のエラー（プロプランのみ）
       if (isPremium) {
-        const appliedSetting = getAppliedSetting(day.date, workMinutes);
-        if (appliedSetting) {
-          // 勤務時間のみで比較（休憩時間は除く）
-          const standardWorkMinutes = appliedSetting.workHours * 60;
-          if (workMinutes < standardWorkMinutes) {
-            errors.push("勤務時間が設定より短い");
+      const appliedSetting = getAppliedSetting(day.date, workMinutes);
+      if (appliedSetting) {
+        // 勤務時間のみで比較（休憩時間は除く）
+        const standardWorkMinutes = appliedSetting.workHours * 60;
+        if (workMinutes < standardWorkMinutes) {
+          errors.push("勤務時間が設定より短い");
           }
         }
       }
@@ -379,13 +379,13 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
         
         // 適用設定を取得して残業時間を計算（プロプランのみ）
         if (isPremium) {
-          const appliedSetting = getAppliedSetting(day.date, dayMinutes);
-          if (appliedSetting) {
-            // 勤務時間のみで比較（休憩時間は除く）
-            const standardWorkMinutes = appliedSetting.workHours * 60;
-            
-            if (dayMinutes > standardWorkMinutes) {
-              overtimeMinutes += dayMinutes - standardWorkMinutes;
+        const appliedSetting = getAppliedSetting(day.date, dayMinutes);
+        if (appliedSetting) {
+          // 勤務時間のみで比較（休憩時間は除く）
+          const standardWorkMinutes = appliedSetting.workHours * 60;
+          
+          if (dayMinutes > standardWorkMinutes) {
+            overtimeMinutes += dayMinutes - standardWorkMinutes;
             }
           }
         }
@@ -432,22 +432,22 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       if (day.clockIn && day.clockOut) {
         const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
         if (isPremium) {
-          const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
-          if (appliedSettingObj) {
-            appliedSetting = appliedSettingObj.name;
-            // 勤務時間のみで比較（休憩時間は除く）
-            const standardWorkMinutes = appliedSettingObj.workHours * 60;
-            if (dayMinutes > standardWorkMinutes) {
-              const overtimeMin = dayMinutes - standardWorkMinutes;
-              const overtimeHrs = Math.floor(overtimeMin / 60);
-              const overtimeMins = Math.floor(overtimeMin % 60);
-              overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
-            } else {
-              overtimeForDay = "0時間0分";
-            }
+        const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
+        if (appliedSettingObj) {
+          appliedSetting = appliedSettingObj.name;
+          // 勤務時間のみで比較（休憩時間は除く）
+          const standardWorkMinutes = appliedSettingObj.workHours * 60;
+          if (dayMinutes > standardWorkMinutes) {
+            const overtimeMin = dayMinutes - standardWorkMinutes;
+            const overtimeHrs = Math.floor(overtimeMin / 60);
+            const overtimeMins = Math.floor(overtimeMin % 60);
+            overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
           } else {
-            appliedSetting = "—";
-            overtimeForDay = "—";
+            overtimeForDay = "0時間0分";
+          }
+        } else {
+          appliedSetting = "—";
+          overtimeForDay = "—";
           }
         } else {
           appliedSetting = "有料プラン機能";
@@ -689,7 +689,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{staff.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{staff.name}</h1>
               {isPremium && (
                 <div className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm font-medium">
                   有料プラン
@@ -861,23 +861,23 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
                   const dayMinutes = (day.clockOut.timestamp - day.clockIn.timestamp) / (1000 * 60);
                   
                   if (isPremium) {
-                    // 初回のみ自動割り当てを実行（設定がない場合のみ）
-                    if (appliedSettings && !appliedSettings[day.date] && !selectedSettings.has(day.date)) {
-                      void handleAutoAssign(day.date, dayMinutes);
-                    }
-                    
-                    const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
-                    if (appliedSettingObj) {
-                      appliedSetting = appliedSettingObj.name;
-                      // 勤務時間のみで比較（休憩時間は除く）
-                      const standardWorkMinutes = appliedSettingObj.workHours * 60;
-                      if (dayMinutes > standardWorkMinutes) {
-                        const overtimeMin = dayMinutes - standardWorkMinutes;
-                        const overtimeHrs = Math.floor(overtimeMin / 60);
-                        const overtimeMins = Math.floor(overtimeMin % 60);
-                        overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
-                      } else {
-                        overtimeForDay = "0時間0分";
+                  // 初回のみ自動割り当てを実行（設定がない場合のみ）
+                  if (appliedSettings && !appliedSettings[day.date] && !selectedSettings.has(day.date)) {
+                    void handleAutoAssign(day.date, dayMinutes);
+                  }
+                  
+                  const appliedSettingObj = getAppliedSetting(day.date, dayMinutes);
+                  if (appliedSettingObj) {
+                    appliedSetting = appliedSettingObj.name;
+                    // 勤務時間のみで比較（休憩時間は除く）
+                    const standardWorkMinutes = appliedSettingObj.workHours * 60;
+                    if (dayMinutes > standardWorkMinutes) {
+                      const overtimeMin = dayMinutes - standardWorkMinutes;
+                      const overtimeHrs = Math.floor(overtimeMin / 60);
+                      const overtimeMins = Math.floor(overtimeMin % 60);
+                      overtimeForDay = `${overtimeHrs}時間${overtimeMins}分`;
+                    } else {
+                      overtimeForDay = "0時間0分";
                       }
                     } else {
                       appliedSetting = "—";
@@ -923,28 +923,28 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
 
                         {isPremium ? (
                           <>
-                            {workSettings && (
-                              <div className="w-32 flex-shrink-0">
-                                <span className="text-xs text-gray-500">適用設定</span>
-                                <select
-                                  value={appliedSettings && appliedSettings[day.date] ? appliedSettings[day.date].workSettingId : (selectedSettings.get(day.date) || 'auto')}
-                                  onChange={(e) => void handleSettingChange(day.date, e.target.value)}
-                                  className="text-xs font-medium text-blue-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer w-full"
-                                >
-                                  <option value="auto">{appliedSetting || "—"}</option>
-                                  <option value="null">—（設定なし）</option>
-                                  {workSettings.map((setting) => (
-                                    <option key={setting._id} value={setting._id}>
-                                      {setting.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-                            <div className="w-20 flex-shrink-0">
-                              <span className="text-xs text-gray-500">残業時間</span>
-                              <p className="text-sm font-medium text-orange-600">{overtimeForDay || "—"}</p>
-                            </div>
+                        {workSettings && (
+                          <div className="w-32 flex-shrink-0">
+                            <span className="text-xs text-gray-500">適用設定</span>
+                            <select
+                              value={appliedSettings && appliedSettings[day.date] ? appliedSettings[day.date].workSettingId : (selectedSettings.get(day.date) || 'auto')}
+                              onChange={(e) => void handleSettingChange(day.date, e.target.value)}
+                              className="text-xs font-medium text-blue-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer w-full"
+                            >
+                              <option value="auto">{appliedSetting || "—"}</option>
+                              <option value="null">—（設定なし）</option>
+                              {workSettings.map((setting) => (
+                                <option key={setting._id} value={setting._id}>
+                                  {setting.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <div className="w-20 flex-shrink-0">
+                          <span className="text-xs text-gray-500">残業時間</span>
+                          <p className="text-sm font-medium text-orange-600">{overtimeForDay || "—"}</p>
+                        </div>
                           </>
                         ) : (
                           <div className="w-32 flex-shrink-0">
