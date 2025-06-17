@@ -27,12 +27,81 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
 
   // 初期設定を作成
   useEffect(() => {
-    if (workSettings && workSettings.length === 0) {
+    if (isPremium && workSettings && workSettings.length === 0) {
       createInitialSettings().catch(() => {
         // エラーは無視（既に設定がある場合など）
       });
     }
-  }, [workSettings, createInitialSettings]);
+  }, [isPremium, workSettings, createInitialSettings]);
+
+  // プロプランでない場合はティザー表示
+  if (!isPremium) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">勤務設定</h1>
+          <div className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-sm font-medium">
+            有料プラン機能
+          </div>
+        </div>
+        
+        <div className="relative bg-white rounded-lg shadow p-6">
+          <div className="filter blur-sm pointer-events-none">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {i === 0 ? "日勤" : i === 1 ? "夜勤" : "パート"}
+                    </h3>
+                    {i === 0 && (
+                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
+                        デフォルト
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 flex items-center gap-1">
+                        <span>⏰</span> 労働時間
+                      </span>
+                      <span className="text-sm font-medium text-gray-900">
+                        {i === 0 ? "8時間" : i === 1 ? "10時間" : "4時間"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 flex items-center gap-1">
+                        <span>☕</span> 休憩時間
+                      </span>
+                      <span className="text-sm font-medium text-gray-900">1時間</span>
+                    </div>
+                    <div className="flex justify-between items-center border-t pt-2">
+                      <span className="text-sm text-gray-600 flex items-center gap-1">
+                        <span>📊</span> 総勤務時間
+                      </span>
+                      <span className="text-sm font-semibold text-blue-600">
+                        {i === 0 ? "9時間" : i === 1 ? "11時間" : "5時間"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* オーバーレイメッセージ */}
+          <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
+            <div className="text-center">
+              <span className="text-gray-400 text-4xl">⚙️</span>
+              <p className="text-gray-700 font-medium mt-4">勤務設定機能は有料プランでご利用いただけます</p>
+              <p className="text-gray-500 text-sm mt-2">労働時間と休憩時間を設定して、残業時間を正確に計算できます</p>
+              <p className="text-gray-500 text-sm mt-1">左下の開発用スイッチで有料プランに切り替えてお試しください</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const resetForm = () => {
     setFormData({
@@ -132,7 +201,12 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">勤務設定</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">勤務設定</h1>
+            <div className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm font-medium">
+              有料プラン
+            </div>
+          </div>
           <p className="text-gray-600 mt-2">
             労働時間と休憩時間を設定して、残業時間を正確に計算します
           </p>
@@ -179,7 +253,7 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
                   </button>
                   {!setting.isDefault && (
                     <button
-                      onClick={() => handleDelete(setting._id)}
+                      onClick={() => void handleDelete(setting._id)}
                       className="text-red-600 hover:text-red-800 text-sm font-medium ml-2"
                     >
                       削除
@@ -211,7 +285,7 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
 
               {!setting.isDefault && (
                 <button
-                  onClick={() => handleSetDefault(setting._id)}
+                  onClick={() => void handleSetDefault(setting._id)}
                   className="w-full mt-4 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors font-medium"
                 >
                   デフォルトに設定
@@ -239,7 +313,7 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
                 </button>
               </div>
               
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     設定名 <span className="text-red-500">*</span>

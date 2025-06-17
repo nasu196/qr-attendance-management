@@ -337,23 +337,28 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">
-                      <div className="text-right">
+                      {/* ステータスバッジ */}
+                      <div className="flex flex-col gap-1">
+                        {attendance.status === "completed" && (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            勤務完了
+                          </span>
+                        )}
+                        {errors.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {errors.map((error, index) => (
+                              <span key={index}>{getErrorBadge(error)}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-left">
                         <p className="text-sm font-medium text-gray-900">
                           出勤時刻: {attendance.clockIn ? formatTime(attendance.clockIn.timestamp) : "—"}
                         </p>
                         <p className="text-sm text-gray-500">
                           退勤時刻: {attendance.clockOut ? formatTime(attendance.clockOut.timestamp) : "—"}
                         </p>
-                        {attendance.status === "completed" && (
-                          <p className="text-xs text-green-600 font-medium mt-1">勤務完了</p>
-                        )}
-                        {errors.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {errors.map((error, index) => (
-                              <span key={index}>{getErrorBadge(error)}</span>
-                            ))}
-                          </div>
-                        )}
                       </div>
                       <button
                         onClick={() => openCorrectionModal(attendance.staff._id, attendance.staff.name)}
