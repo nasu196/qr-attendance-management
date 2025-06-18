@@ -9,13 +9,33 @@ export function QRAttendanceStandalone() {
   const { urlId } = useParams<{ urlId: string }>();
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   
   const addDebugInfo = (info: string) => {
+    console.log(`[QR Debug] ${info}`); // コンソールにも出力
     setDebugInfo(prev => [...prev, `${new Date().toLocaleTimeString()}: ${info}`]);
+  };
+
+  const addErrorInfo = (error: string, details?: any) => {
+    console.error(`[QR Error] ${error}`, details); // コンソールにエラー出力
+    addDebugInfo(`❌ ERROR: ${error}`);
+    if (details) {
+      addDebugInfo(`Details: ${JSON.stringify(details, null, 2)}`);
+    }
   };
 
   useEffect(() => {
     addDebugInfo(`URLパラメータ取得: ${urlId || 'なし'}`);
+    addDebugInfo(`User Agent: ${navigator.userAgent}`);
+    addDebugInfo(`画面サイズ: ${window.innerWidth}x${window.innerHeight}`);
+    
+    // ブラウザサポートチェック
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      addErrorInfo("このブラウザはカメラアクセスをサポートしていません");
+      setCameraError("カメラアクセス非対応ブラウザ");
+    } else {
+      addDebugInfo("✅ カメラAPI対応ブラウザ");
+    }
   }, [urlId]);
   
   const qrUrlData = useQuery(api.qrAttendanceUrl.getQRAttendanceUrlByUrlId, 
@@ -50,36 +70,65 @@ export function QRAttendanceStandalone() {
   // QRコードスキャナーの初期化
   useEffect(() => {
     if (isScanning && scannerRef.current && attendanceType) {
-      startScanner();
+      void startScanner();
     }
     
     return () => {
       if (html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().catch(() => {});
+        void html5QrCodeRef.current.stop().catch(() => {});
       }
     };
   }, [isScanning, attendanceType]);
 
   const startScanner = async () => {
     try {
+      addDebugInfo("カメラ起動開始...");
+      
+      // カメラ権限チェック
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop()); // すぐに停止
+        addDebugInfo("✅ カメラ権限取得成功");
+      } catch (permissionError) {
+        addErrorInfo("カメラ権限エラー", permissionError);
+        setCameraError("カメラへのアクセス権限が必要です。ブラウザの設定を確認してください。");
+        setIsScanning(false);
+        return;
+      }
+      
       const html5QrCode = new Html5Qrcode("qr-reader");
       html5QrCodeRef.current = html5QrCode;
       
-      await html5QrCode.start(
-        { facingMode: "environment" },
-        {
-          fps: 5,
-          qrbox: { width: 280, height: 280 }
+      // モバイル用カメラ設定
+      const cameraConfig = {
+        facingMode: { ideal: "environment" }, // 背面カメラを優先
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      };
+      
+      const scanConfig = {
+        fps: 10,
+        qrbox: { 
+          width: Math.min(300, window.innerWidth - 40), 
+          height: Math.min(300, window.innerWidth - 40) 
         },
-        onScanSuccess,
+        aspectRatio: 1.0
+      };
+      
+      addDebugInfo(`スキャン設定: ${JSON.stringify(scanConfig)}`);
+      
+      await html5QrCode.start(
+        cameraConfig,
+        scanConfig,
+        (decodedText: string) => void onScanSuccess(decodedText),
         onScanFailure
       );
-      addDebugInfo("カメラ起動成功");
+      addDebugInfo("✅ カメラ起動成功");
     } catch (err: any) {
-      console.error("カメラの起動に失敗しました:", err);
+      addErrorInfo("カメラの起動に失敗しました", err);
       const errorMessage = err?.message || "不明なエラー";
       toast.error(`カメラの起動に失敗しました: ${errorMessage}`);
-      addDebugInfo(`カメラエラー: ${errorMessage}`);
+      setCameraError(`カメラエラー: ${errorMessage}`);
       setIsScanning(false);
     }
   };
@@ -123,11 +172,11 @@ export function QRAttendanceStandalone() {
       });
       
       setIsScanning(false);
-      addDebugInfo("打刻成功");
+      addDebugInfo("✅ 打刻成功");
       
     } catch (error: any) {
+      addErrorInfo("打刻エラー", error);
       toast.error(error.message || "打刻に失敗しました");
-      addDebugInfo(`打刻エラー: ${error.message}`);
       setIsScanning(false);
     } finally {
       setIsProcessing(false);
@@ -152,7 +201,7 @@ export function QRAttendanceStandalone() {
 
   const handleBack = () => {
     if (html5QrCodeRef.current) {
-      html5QrCodeRef.current.stop().catch(() => {});
+      void html5QrCodeRef.current.stop().catch(() => {});
     }
     setIsScanning(false);
     setAttendanceType(null);
@@ -378,15 +427,17 @@ export function QRAttendanceStandalone() {
               <input
                 type="file"
                 accept="image/*"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file && html5QrCodeRef.current && !isProcessing && !scanCooldownRef.current) {
-                    try {
-                      const result = await html5QrCodeRef.current.scanFile(file, true);
-                      onScanSuccess(result);
-                    } catch (err) {
-                      toast.error("画像からQRコードを読み取れませんでした");
-                    }
+                    void (async () => {
+                      try {
+                        const result = await html5QrCodeRef.current!.scanFile(file, true);
+                        void onScanSuccess(result);
+                      } catch (err) {
+                        toast.error("画像からQRコードを読み取れませんでした");
+                      }
+                    })();
                   }
                 }}
                 className="hidden"
@@ -421,6 +472,23 @@ export function QRAttendanceStandalone() {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">QR打刻システム</h1>
             <p className="text-gray-600">{qrUrlData.name}</p>
           </div>
+          
+          {/* カメラエラー警告 */}
+          {cameraError && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-red-600">⚠️</span>
+                <h3 className="text-red-800 font-medium">カメラアクセスエラー</h3>
+              </div>
+              <p className="text-red-700 text-sm mb-3">{cameraError}</p>
+              <div className="text-xs text-red-600 space-y-1">
+                <p>【対処法】</p>
+                <p>• ブラウザの設定でカメラ権限を許可してください</p>
+                <p>• HTTPSサイトまたはローカルホストでアクセスしてください</p>
+                <p>• 他のアプリでカメラが使用中でないか確認してください</p>
+              </div>
+            </div>
+          )}
           
           <div className="space-y-4 mb-8">
             <button
@@ -459,10 +527,16 @@ export function QRAttendanceStandalone() {
           </button>
           
           {showDebug && (
-            <div className="mt-4 bg-gray-100 rounded p-3 text-left text-xs">
+            <div className="mt-4 bg-gray-100 rounded p-3 text-left text-xs max-h-64 overflow-y-auto">
+              <div className="mb-2 font-medium text-gray-800">
+                デバッグログ（コンソールにも出力されています）
+              </div>
               {debugInfo.map((info, i) => (
-                <div key={i} className="text-gray-700">{info}</div>
+                <div key={i} className="text-gray-700 mb-1 break-words">{info}</div>
               ))}
+              {debugInfo.length === 0 && (
+                <div className="text-gray-500">まだログがありません</div>
+              )}
             </div>
           )}
         </div>

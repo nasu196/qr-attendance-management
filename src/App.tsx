@@ -16,6 +16,7 @@ type MenuItem = "dashboard" | "staff" | "qr-url" | "report" | "calendar" | "work
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<MenuItem>("dashboard");
   const [isPremium, setIsPremium] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const user = useQuery(api.auth.loggedInUser);
 
   const menuItems = [
@@ -27,6 +28,11 @@ export default function App() {
     { id: "work-settings" as MenuItem, label: "勤務設定", icon: "⚙️", premium: true },
     { id: "help" as MenuItem, label: "ヘルプ", icon: "❓", premium: false },
   ];
+
+  const handleMenuClick = (menuId: MenuItem) => {
+    setActiveMenu(menuId);
+    setIsMobileMenuOpen(false); // モバイルメニューを閉じる
+  };
 
   const renderContent = () => {
     switch (activeMenu) {
@@ -49,6 +55,8 @@ export default function App() {
     }
   };
 
+  const currentMenuItem = menuItems.find(item => item.id === activeMenu);
+
   return (
     <main className="min-h-screen bg-gray-50">
       <Unauthenticated>
@@ -67,8 +75,8 @@ export default function App() {
       
       <Authenticated>
         <div className="flex h-screen">
-          {/* サイドバー */}
-          <div className="w-64 bg-white shadow-lg flex flex-col">
+          {/* デスクトップ用サイドバー */}
+          <div className="hidden md:flex w-64 bg-white shadow-lg flex-col">
             <div className="p-6 border-b border-gray-200">
               <h1 className="text-xl font-bold text-gray-900">勤怠管理システム</h1>
               {user && (
@@ -83,7 +91,7 @@ export default function App() {
                 {menuItems.map((item) => (
                   <li key={item.id}>
                     <button
-                      onClick={() => setActiveMenu(item.id)}
+                      onClick={() => handleMenuClick(item.id)}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
                         activeMenu === item.id
                           ? "bg-blue-100 text-blue-700 font-medium"
@@ -119,11 +127,111 @@ export default function App() {
               <SignOutButton />
             </div>
           </div>
+
+          {/* モバイル用オーバーレイメニュー */}
+          {isMobileMenuOpen && (
+            <div className="md:hidden fixed inset-0 z-50 flex">
+              {/* オーバーレイ背景 */}
+              <div 
+                className="flex-1 bg-black bg-opacity-50"
+                onClick={() => setIsMobileMenuOpen(false)}
+              ></div>
+              
+              {/* メニューパネル */}
+              <div className="w-64 bg-white shadow-lg flex flex-col">
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h1 className="text-xl font-bold text-gray-900">勤怠管理システム</h1>
+                      {user && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          {user.name || user.email}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="text-gray-400 hover:text-gray-600 text-2xl"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                
+                <nav className="flex-1 p-4">
+                  <ul className="space-y-2">
+                    {menuItems.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          onClick={() => handleMenuClick(item.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                            activeMenu === item.id
+                              ? "bg-blue-100 text-blue-700 font-medium"
+                              : "text-gray-700 hover:bg-gray-100"
+                          }`}
+                        >
+                          <span className="text-lg">{item.icon}</span>
+                          <span className="flex-1">{item.label}</span>
+                          {item.premium && !isPremium && (
+                            <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                              Pro
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+                
+                <div className="p-4 border-t border-gray-200">
+                  {/* 開発用プレミアムスイッチ */}
+                  <div className="mb-4">
+                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={isPremium}
+                        onChange={(e) => setIsPremium(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      開発用: 有料プラン
+                    </label>
+                  </div>
+                  <SignOutButton />
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* メインコンテンツ */}
-          <div className="flex-1 overflow-auto">
-            <div className="p-8">
-              {renderContent()}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* モバイル用ヘッダー */}
+            <div className="md:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{currentMenuItem?.icon}</span>
+                <h1 className="text-lg font-semibold text-gray-900">{currentMenuItem?.label}</h1>
+                {currentMenuItem?.premium && !isPremium && (
+                  <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                    Pro
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="text-gray-600 hover:text-gray-800 p-2"
+              >
+                <div className="space-y-1">
+                  <div className="w-5 h-0.5 bg-current"></div>
+                  <div className="w-5 h-0.5 bg-current"></div>
+                  <div className="w-5 h-0.5 bg-current"></div>
+                </div>
+              </button>
+            </div>
+
+            {/* メインコンテンツエリア */}
+            <div className="flex-1 overflow-auto">
+              <div className="p-4 md:p-8">
+                {renderContent()}
+              </div>
             </div>
           </div>
         </div>

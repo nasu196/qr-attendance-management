@@ -5,6 +5,10 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
+  server: {
+    host: true, // 外部からのアクセスを許可
+    port: 5173, // ポート番号を明示的に指定
+  },
   plugins: [
     react(),
     tsconfigPaths(),
