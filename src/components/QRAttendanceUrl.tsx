@@ -31,7 +31,7 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
       }
     };
 
-    initializeDefaultUrl();
+    void initializeDefaultUrl();
   }, [qrUrls, createQRUrl]);
 
   // QRコード生成
@@ -56,7 +56,7 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
       }
     };
 
-    generateQRCode();
+    void generateQRCode();
   }, [qrUrls]);
 
   if (!qrUrls) {
@@ -143,13 +143,13 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* QRコード表示 */}
-            <div className="text-center">
-              <div className="bg-gray-50 rounded-lg p-6 inline-block">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="bg-gray-50 rounded-lg p-6">
                 {qrCodeDataUrl ? (
                   <img 
                     src={qrCodeDataUrl} 
                     alt="QR打刻用QRコード" 
-                    className="w-64 h-64 mx-auto"
+                    className="w-64 h-64 block"
                   />
                 ) : (
                   <div className="w-64 h-64 bg-gray-200 rounded-lg flex items-center justify-center">
@@ -160,7 +160,7 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
               <button
                 onClick={downloadQRCode}
                 disabled={!qrCodeDataUrl}
-                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 w-full max-w-64"
               >
                 QRコードをダウンロード
               </button>
@@ -180,7 +180,7 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
                   />
                   <button
-                    onClick={() => copyToClipboard(fullUrl)}
+                    onClick={() => void copyToClipboard(fullUrl)}
                     className="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
                   >
                     コピー
@@ -236,7 +236,7 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
 
               <div className="flex gap-3">
                 <button
-                  onClick={handleUpdateUrl}
+                  onClick={() => void handleUpdateUrl()}
                   disabled={isUpdating}
                   className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
                 >
