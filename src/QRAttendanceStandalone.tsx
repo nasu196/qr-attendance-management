@@ -69,7 +69,7 @@ export function QRAttendanceStandalone() {
 
   // QRコードスキャナーの初期化
   useEffect(() => {
-    if (isScanning && scannerRef.current && attendanceType) {
+    if (isScanning && attendanceType) {
       void startScanner();
     }
     
