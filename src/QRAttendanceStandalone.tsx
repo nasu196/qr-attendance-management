@@ -99,20 +99,30 @@ export function QRAttendanceStandalone() {
       const html5QrCode = new Html5Qrcode("qr-reader");
       html5QrCodeRef.current = html5QrCode;
       
-      // モバイル用カメラ設定
+      // OPPO端末対応のカメラ設定
       const cameraConfig = {
-        facingMode: { ideal: "environment" }, // 背面カメラを優先
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        facingMode: "environment", // idealを削除してシンプルに
+        width: { min: 640, ideal: 1280, max: 1920 },
+        height: { min: 480, ideal: 720, max: 1080 }
       };
       
       const scanConfig = {
-        fps: 10,
-        qrbox: { 
-          width: Math.min(300, window.innerWidth - 40), 
-          height: Math.min(300, window.innerWidth - 40) 
+        fps: 5, // OPPOで安定するよう低めに設定
+        qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
+          // 動的にサイズを計算（OPPO端末での安定性向上）
+          const minEdgePercentage = 0.7;
+          const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+          const calculatedSize = Math.floor(minEdgeSize * minEdgePercentage);
+          return {
+            width: calculatedSize,
+            height: calculatedSize,
+          };
         },
-        aspectRatio: 1.0
+        aspectRatio: 1.0,
+        disableFlip: false, // OPPO端末でのミラー問題対策
+        videoConstraints: {
+          advanced: [{ focusMode: "continuous" }] // オートフォーカス有効化
+        }
       };
       
       addDebugInfo(`スキャン設定: ${JSON.stringify(scanConfig)}`);
