@@ -3,7 +3,7 @@ import { api } from "../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
 import { toast, Toaster } from "sonner";
 import { useParams } from "react-router-dom";
-import { Html5Qrcode } from "html5-qrcode";
+import QrScanner from "qr-scanner";
 
 export function QRAttendanceStandalone() {
   const { urlId } = useParams<{ urlId: string }>();
@@ -62,8 +62,8 @@ export function QRAttendanceStandalone() {
   const [showDebug, setShowDebug] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const scannerRef = useRef<HTMLDivElement>(null);
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+
+  const qrScannerRef = useRef<QrScanner | null>(null);
   const lastScanTimeRef = useRef<number>(0);
   const scanCooldownRef = useRef<boolean>(false);
 
@@ -74,8 +74,9 @@ export function QRAttendanceStandalone() {
     }
     
     return () => {
-      if (html5QrCodeRef.current) {
-        void html5QrCodeRef.current.stop().catch(() => {});
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop();
+        qrScannerRef.current.destroy();
       }
     };
   }, [isScanning, attendanceType]);
@@ -96,44 +97,35 @@ export function QRAttendanceStandalone() {
         return;
       }
       
-      const html5QrCode = new Html5Qrcode("qr-reader");
-      html5QrCodeRef.current = html5QrCode;
+      const videoElement = document.getElementById("qr-video") as HTMLVideoElement;
+      if (!videoElement) {
+        addErrorInfo("ビデオ要素が見つかりません");
+        setIsScanning(false);
+        return;
+      }
       
-      // OPPO端末対応のカメラ設定
-      const cameraConfig = {
-        facingMode: "environment", // idealを削除してシンプルに
-        width: { min: 640, ideal: 1280, max: 1920 },
-        height: { min: 480, ideal: 720, max: 1080 }
-      };
-      
-      const scanConfig = {
-        fps: 5, // OPPOで安定するよう低めに設定
-        qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
-          // 動的にサイズを計算（OPPO端末での安定性向上）
-          const minEdgePercentage = 0.7;
-          const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-          const calculatedSize = Math.floor(minEdgeSize * minEdgePercentage);
-          return {
-            width: calculatedSize,
-            height: calculatedSize,
-          };
+      // OPPO端末対応のQRスキャナー設定
+      const qrScanner = new QrScanner(
+        videoElement,
+        (result: QrScanner.ScanResult) => {
+          void onScanSuccess(result.data);
         },
-        aspectRatio: 1.0,
-        disableFlip: false, // OPPO端末でのミラー問題対策
-        videoConstraints: {
-          advanced: [{ focusMode: "continuous" }] // オートフォーカス有効化
+        {
+          // OPPO端末での安定性を重視した設定
+          preferredCamera: 'environment', // 背面カメラ優先
+          maxScansPerSecond: 3, // スキャン頻度を下げて安定性向上
+          highlightScanRegion: true, // スキャン領域をハイライト
+          highlightCodeOutline: true, // QRコードの輪郭をハイライト
+          returnDetailedScanResult: true,
         }
-      };
-      
-      addDebugInfo(`スキャン設定: ${JSON.stringify(scanConfig)}`);
-      
-      await html5QrCode.start(
-        cameraConfig,
-        scanConfig,
-        (decodedText: string) => void onScanSuccess(decodedText),
-        onScanFailure
       );
+      
+      qrScannerRef.current = qrScanner;
+      
+      addDebugInfo("QRスキャナー開始...");
+      await qrScanner.start();
       addDebugInfo("✅ カメラ起動成功");
+      
     } catch (err: any) {
       addErrorInfo("カメラの起動に失敗しました", err);
       const errorMessage = err?.message || "不明なエラー";
@@ -161,8 +153,8 @@ export function QRAttendanceStandalone() {
     addDebugInfo(`QRコード読み取り: ${decodedText}`);
     
     try {
-      if (html5QrCodeRef.current) {
-        await html5QrCodeRef.current.stop();
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop();
       }
       
       const result = await recordAttendance({
@@ -196,9 +188,7 @@ export function QRAttendanceStandalone() {
     }
   };
 
-  const onScanFailure = (error: string) => {
-    // スキャン失敗は頻繁に発生するため、ログのみ
-  };
+
 
   const handleTypeSelect = (type: "clock_in" | "clock_out") => {
     setAttendanceType(type);
@@ -210,8 +200,9 @@ export function QRAttendanceStandalone() {
   };
 
   const handleBack = () => {
-    if (html5QrCodeRef.current) {
-      void html5QrCodeRef.current.stop().catch(() => {});
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop();
+      qrScannerRef.current.destroy();
     }
     setIsScanning(false);
     setAttendanceType(null);
@@ -408,11 +399,14 @@ export function QRAttendanceStandalone() {
         {/* スキャナー */}
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="text-center w-full max-w-sm">
-            <div 
-              id="qr-reader" 
-              ref={scannerRef}
-              className="w-full aspect-square max-w-80 mx-auto border-4 border-white rounded-2xl overflow-hidden mb-6"
-            ></div>
+            <div className="w-full aspect-square max-w-80 mx-auto border-4 border-white rounded-2xl overflow-hidden mb-6">
+              <video 
+                id="qr-video" 
+                className="w-full h-full object-cover"
+                playsInline
+                muted
+              ></video>
+            </div>
             
             <div className="bg-white/10 backdrop-blur rounded-lg p-4 mb-6">
               <p className="text-white text-lg font-medium mb-2">
@@ -439,10 +433,10 @@ export function QRAttendanceStandalone() {
                 accept="image/*"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file && html5QrCodeRef.current && !isProcessing && !scanCooldownRef.current) {
+                  if (file && !isProcessing && !scanCooldownRef.current) {
                     void (async () => {
                       try {
-                        const result = await html5QrCodeRef.current!.scanFile(file, true);
+                        const result = await QrScanner.scanImage(file);
                         void onScanSuccess(result);
                       } catch (err) {
                         toast.error("画像からQRコードを読み取れませんでした");
