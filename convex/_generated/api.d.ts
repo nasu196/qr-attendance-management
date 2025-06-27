@@ -13,9 +13,11 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as aiChat from "../aiChat.js";
 import type * as attendance from "../attendance.js";
 import type * as auth from "../auth.js";
 import type * as calendar from "../calendar.js";
+import type * as help from "../help.js";
 import type * as http from "../http.js";
 import type * as qrAttendanceUrl from "../qrAttendanceUrl.js";
 import type * as reports from "../reports.js";
@@ -33,9 +35,11 @@ import type * as workSettings from "../workSettings.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  aiChat: typeof aiChat;
   attendance: typeof attendance;
   auth: typeof auth;
   calendar: typeof calendar;
+  help: typeof help;
   http: typeof http;
   qrAttendanceUrl: typeof qrAttendanceUrl;
   reports: typeof reports;

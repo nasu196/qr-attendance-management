@@ -23,7 +23,6 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
         try {
           await createQRUrl({
             name: "メイン打刻ページ",
-            expiresAt: undefined, // 無期限
           });
         } catch (error) {
           console.error("デフォルトURL作成エラー:", error);
@@ -87,7 +86,6 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
       await updateQRUrl({
         qrUrlId: mainUrl._id,
         name: mainUrl.name,
-        expiresAt: undefined,
       });
       toast.success("QR打刻URLを更新しました");
       setShowUpdateModal(false);

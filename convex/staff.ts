@@ -95,8 +95,27 @@ export const createStaff = mutation({
       throw new Error("認証が必要です");
     }
 
-    // 職員番号を生成（現在の時刻ベース）
-    const employeeId = `EMP${Date.now().toString().slice(-8)}`;
+    // 職員番号を生成（連番ベース）
+    const existingStaff = await ctx.db
+      .query("staff")
+      .withIndex("by_created_by", (q) => q.eq("createdBy", userId))
+      .collect();
+    
+    // 既存のスタッフから最大の番号を取得
+    let maxNumber = 0;
+    existingStaff.forEach(staff => {
+      const match = staff.employeeId.match(/^EMP(\d+)$/);
+      if (match) {
+        const number = parseInt(match[1], 10);
+        if (number > maxNumber) {
+          maxNumber = number;
+        }
+      }
+    });
+    
+    // 次の番号を生成（4桁ゼロパディング）
+    const nextNumber = (maxNumber + 1).toString().padStart(4, '0');
+    const employeeId = `EMP${nextNumber}`;
     
     // QRコード用の一意な文字列を生成
     const qrCode = `${employeeId}_${Math.random().toString(36).substring(2, 15)}`;

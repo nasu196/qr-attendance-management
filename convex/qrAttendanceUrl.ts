@@ -36,7 +36,6 @@ export const getQRAttendanceUrlByUrlId = query({
 export const createQRAttendanceUrl = mutation({
   args: {
     name: v.string(),
-    expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -52,7 +51,6 @@ export const createQRAttendanceUrl = mutation({
       name: args.name,
       urlId,
       isActive: true,
-      expiresAt: args.expiresAt,
       createdBy: userId,
     });
   },
@@ -84,7 +82,6 @@ export const updateQRAttendanceUrl = mutation({
   args: {
     qrUrlId: v.id("qrAttendanceUrls"),
     name: v.string(),
-    expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -104,7 +101,6 @@ export const updateQRAttendanceUrl = mutation({
     await ctx.db.patch(args.qrUrlId, {
       name: args.name,
       urlId: newUrlId,
-      expiresAt: args.expiresAt,
       isActive: true,
     });
 

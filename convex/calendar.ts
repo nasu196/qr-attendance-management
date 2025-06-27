@@ -86,6 +86,7 @@ export const getMonthlyCalendar = query({
               staffId: staff._id,
               name: staff.name,
               employeeId: staff.employeeId,
+              pairId: pair.clockIn.pairId || pair.clockIn._id, // ペアIDを追加
               clockIn: {
                 timestamp: pair.clockIn.timestamp,
                 status: pair.clockIn.status || "on_time",

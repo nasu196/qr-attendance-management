@@ -153,6 +153,19 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
     return staffData || null;
   };
 
+  // スタッフの同日複数出勤を検出
+  const getStaffMultipleAttendance = (staffId: string, day: number) => {
+    const dateKey = formatDate(day);
+    const dayData = calendarData?.dailyData[dateKey];
+    if (!dayData) return { hasMultiple: false, count: 0 };
+    
+    const staffRecords = dayData.staffList.filter(s => s.staffId === staffId);
+    return {
+      hasMultiple: staffRecords.length > 1,
+      count: staffRecords.length
+    };
+  };
+
   // タグの選択/解除
   const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -180,85 +193,88 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
         </div>
       </div>
 
-      {/* 月選択 */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={() => changeMonth(-1)}
-            className="p-2 text-gray-400 hover:text-gray-600"
-          >
-            ←
-          </button>
-          <span className="text-lg font-medium text-gray-700 min-w-[120px] text-center">
-            {monthName}
-          </span>
-          <button
-            onClick={() => changeMonth(1)}
-            className="p-2 text-gray-400 hover:text-gray-600"
-          >
-            →
-          </button>
+      {/* 月選択とタグフィルター（横並び） */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* 月選択 */}
+        <div className="bg-white rounded-lg shadow p-4 flex-1">
+          <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={() => changeMonth(-1)}
+              className="p-2 text-gray-400 hover:text-gray-600"
+            >
+              ←
+            </button>
+            <span className="text-lg font-medium text-gray-700 min-w-[120px] text-center">
+              {monthName}
+            </span>
+            <button
+              onClick={() => changeMonth(1)}
+              className="p-2 text-gray-400 hover:text-gray-600"
+            >
+              →
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* タグフィルター（アコーディオン） */}
-      {allUsedTags && allUsedTags.length > 0 && (
-        <div className="bg-white rounded-lg shadow">
-          <button
-            onClick={() => setIsTagFilterOpen(!isTagFilterOpen)}
-            className="w-full px-6 py-4 flex justify-between items-center text-left hover:bg-gray-50 transition-colors"
-          >
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">タグフィルター</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {selectedTags.length === 0 
-                  ? "すべてのスタッフを表示" 
-                  : `${selectedTags.join(", ")} のスタッフを表示`
-                }
-              </p>
-            </div>
-            <div className={`transform transition-transform duration-300 ease-in-out ${isTagFilterOpen ? 'rotate-180' : ''}`}>
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </button>
-          
-          <div 
-            className={`overflow-hidden transition-all duration-300 ease-in-out ${
-              isTagFilterOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
-            }`}
-          >
-            <div className="px-6 pb-6 border-t border-gray-200">
-              <div className="flex flex-wrap gap-2 mt-4">
-                <button 
-                  onClick={clearTagFilter} 
-                  className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                    selectedTags.length === 0 
-                      ? "bg-blue-600 text-white" 
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  すべて
-                </button>
-                {allUsedTags.map((tag) => (
+        {/* タグフィルター（アコーディオン） */}
+        {allUsedTags && allUsedTags.length > 0 && (
+          <div className="bg-white rounded-lg shadow flex-1">
+            <button
+              onClick={() => setIsTagFilterOpen(!isTagFilterOpen)}
+              className="w-full px-6 py-4 flex justify-between items-center text-left hover:bg-gray-50 transition-colors"
+            >
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">タグフィルター</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  {selectedTags.length === 0 
+                    ? "すべてのスタッフを表示" 
+                    : `${selectedTags.join(", ")} のスタッフを表示`
+                  }
+                </p>
+              </div>
+              <div className={`transform transition-transform duration-300 ease-in-out ${isTagFilterOpen ? 'rotate-180' : ''}`}>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+            
+            <div 
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                isTagFilterOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+              }`}
+            >
+              <div className="px-6 pb-6 border-t border-gray-200">
+                <div className="flex flex-wrap gap-2 mt-4">
                   <button 
-                    key={tag} 
-                    onClick={() => toggleTag(tag)} 
+                    onClick={clearTagFilter} 
                     className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                      selectedTags.includes(tag)
-                        ? "bg-blue-600 text-white"
+                      selectedTags.length === 0 
+                        ? "bg-blue-600 text-white" 
                         : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                   >
-                    {tag}
+                    すべて
                   </button>
-                ))}
+                  {allUsedTags.map((tag) => (
+                    <button 
+                      key={tag} 
+                      onClick={() => toggleTag(tag)} 
+                      className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                        selectedTags.includes(tag)
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* スタッフ別月次表示 */}
       <div className="bg-white rounded-lg shadow">
@@ -322,6 +338,7 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
                       </td>
                       {monthDays.map((day) => {
                         const dayData = getStaffDayData(staff._id, day);
+                        const multipleAttendance = getStaffMultipleAttendance(staff._id, day);
                         const isWeekend = new Date(currentDate.year, currentDate.month - 1, day).getDay() % 6 === 0;
                         
                         return (
@@ -347,6 +364,11 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
                                       }
                                       return `${Math.round(hours * 10) / 10}h`;
                                     })()}
+                                  </div>
+                                )}
+                                {multipleAttendance.hasMultiple && (
+                                  <div className="text-xs text-orange-600 font-medium">
+                                    ※複数出勤あり
                                   </div>
                                 )}
                               </div>

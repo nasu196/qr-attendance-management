@@ -60,7 +60,6 @@ const applicationTables = {
     name: v.string(),
     urlId: v.string(),
     isActive: v.boolean(),
-    expiresAt: v.optional(v.number()),
     createdBy: v.id("users"),
   })
     .index("by_created_by", ["createdBy"])

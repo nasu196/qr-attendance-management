@@ -188,8 +188,6 @@ export function QRAttendanceStandalone() {
     }
   };
 
-
-
   const handleTypeSelect = (type: "clock_in" | "clock_out") => {
     setAttendanceType(type);
     setIsScanning(true);
@@ -224,104 +222,55 @@ export function QRAttendanceStandalone() {
   // エラー表示
   if (error) {
     return (
-      <div className="min-h-screen bg-red-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
         <div className="text-center max-w-md w-full">
           <div className="bg-white rounded-lg shadow-xl p-6">
-            <span className="text-red-400 text-6xl">⚠️</span>
+            <span className="text-gray-400 text-6xl">❌</span>
             <h1 className="text-xl font-bold text-gray-900 mt-4">エラーが発生しました</h1>
             <p className="text-gray-600 mt-2 text-sm">{error}</p>
-            <p className="text-gray-500 mt-2 text-xs">URLパラメータ: {urlId || "なし"}</p>
-            
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="mt-4 text-blue-600 text-sm underline"
-            >
-              デバッグ情報を{showDebug ? '隠す' : '表示'}
-            </button>
-            
-            {showDebug && (
-              <div className="mt-4 bg-gray-100 rounded p-3 text-left text-xs">
-                {debugInfo.map((info, i) => (
-                  <div key={i} className="text-gray-700">{info}</div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // URLの有効性チェック
+  // データ未取得時のローディング
   if (qrUrlData === undefined) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
         <div className="text-center max-w-md w-full">
           <div className="bg-white rounded-lg shadow-xl p-6">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-gray-600 mt-4">読み込み中...</p>
-            <p className="text-gray-500 text-xs mt-2">URL ID: {urlId}</p>
-            
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="mt-4 text-blue-600 text-sm underline"
-            >
-              デバッグ情報を{showDebug ? '隠す' : '表示'}
-            </button>
-            
-            {showDebug && (
-              <div className="mt-4 bg-gray-100 rounded p-3 text-left text-xs">
-                {debugInfo.map((info, i) => (
-                  <div key={i} className="text-gray-700">{info}</div>
-                ))}
-              </div>
-            )}
+            <h1 className="text-xl font-bold text-gray-900 mt-4">読み込み中...</h1>
           </div>
         </div>
       </div>
     );
   }
 
+  // QRURLが見つからない場合
   if (!qrUrlData) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
         <div className="text-center max-w-md w-full">
           <div className="bg-white rounded-lg shadow-xl p-6">
-            <span className="text-gray-400 text-6xl">❌</span>
-            <h1 className="text-xl font-bold text-gray-900 mt-4">無効なURLです</h1>
-            <p className="text-gray-600 mt-2 text-sm">このQR打刻URLは存在しないか、無効になっています。</p>
-            <p className="text-gray-500 text-xs mt-2">URL ID: {urlId}</p>
-            
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="mt-4 text-blue-600 text-sm underline"
-            >
-              デバッグ情報を{showDebug ? '隠す' : '表示'}
-            </button>
-            
-            {showDebug && (
-              <div className="mt-4 bg-gray-100 rounded p-3 text-left text-xs">
-                {debugInfo.map((info, i) => (
-                  <div key={i} className="text-gray-700">{info}</div>
-                ))}
-              </div>
-            )}
+            <span className="text-gray-400 text-6xl">🔍</span>
+            <h1 className="text-xl font-bold text-gray-900 mt-4">ページが見つかりません</h1>
+            <p className="text-gray-600 mt-2 text-sm">指定されたQR打刻URLは存在しません。</p>
           </div>
         </div>
       </div>
     );
   }
-
-  const isExpired = qrUrlData.expiresAt && qrUrlData.expiresAt < Date.now();
   
-  if (!qrUrlData.isActive || isExpired) {
+  if (!qrUrlData.isActive) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
         <div className="text-center max-w-md w-full">
           <div className="bg-white rounded-lg shadow-xl p-6">
             <span className="text-gray-400 text-6xl">⏰</span>
             <h1 className="text-xl font-bold text-gray-900 mt-4">
-              {isExpired ? 'URLの有効期限が切れています' : 'このURLは無効になっています'}
+              このURLは無効になっています
             </h1>
             <p className="text-gray-600 mt-2 text-sm">管理者にお問い合わせください。</p>
           </div>

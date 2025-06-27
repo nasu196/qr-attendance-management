@@ -9,7 +9,8 @@ import { MonthlyCalendar } from "./components/MonthlyCalendar";
 import { MonthlyReport } from "./components/MonthlyReport";
 import { WorkSettings } from "./components/WorkSettings";
 import { QRAttendanceUrl } from "./components/QRAttendanceUrl";
-import { Help } from "./components/Help";
+import Help from "./components/Help";
+import { AIChat } from "./components/AIChat";
 
 type MenuItem = "dashboard" | "staff" | "qr-url" | "report" | "calendar" | "work-settings" | "help";
 
@@ -17,6 +18,7 @@ export default function App() {
   const [activeMenu, setActiveMenu] = useState<MenuItem>("dashboard");
   const [isPremium, setIsPremium] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const user = useQuery(api.auth.loggedInUser);
 
   const menuItems = [
@@ -202,37 +204,81 @@ export default function App() {
             </div>
           )}
           
-          {/* メインコンテンツ */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* モバイル用ヘッダー */}
-            <div className="md:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">{currentMenuItem?.icon}</span>
-                <h1 className="text-lg font-semibold text-gray-900">{currentMenuItem?.label}</h1>
-                {currentMenuItem?.premium && !isPremium && (
-                  <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
-                    Pro
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => setIsMobileMenuOpen(true)}
-                className="text-gray-600 hover:text-gray-800 p-2"
-              >
-                <div className="space-y-1">
-                  <div className="w-5 h-0.5 bg-current"></div>
-                  <div className="w-5 h-0.5 bg-current"></div>
-                  <div className="w-5 h-0.5 bg-current"></div>
+          {/* メインコンテンツエリア全体 */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* 左側: メインコンテンツ */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* モバイル用ヘッダー */}
+              <div className="md:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{currentMenuItem?.icon}</span>
+                  <h1 className="text-lg font-semibold text-gray-900">{currentMenuItem?.label}</h1>
+                  {currentMenuItem?.premium && !isPremium && (
+                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                      Pro
+                    </span>
+                  )}
                 </div>
-              </button>
+                <div className="flex items-center gap-2">
+                  {/* AI チャットスイッチ（モバイル） */}
+                  <button
+                    onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      isAiChatOpen 
+                        ? "bg-purple-100 text-purple-600" 
+                        : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                    }`}
+                    title="AIアシスタント"
+                  >
+                    🤖
+                  </button>
+                  <button
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="text-gray-600 hover:text-gray-800 p-2"
+                  >
+                    <div className="space-y-1">
+                      <div className="w-5 h-0.5 bg-current"></div>
+                      <div className="w-5 h-0.5 bg-current"></div>
+                      <div className="w-5 h-0.5 bg-current"></div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* デスクトップ用右上AIスイッチ */}
+              <div className="hidden md:block absolute top-4 right-4 z-10">
+                <button
+                  onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+                  className={`p-3 rounded-lg shadow-lg transition-colors ${
+                    isAiChatOpen 
+                      ? "bg-purple-100 text-purple-600 shadow-purple-200" 
+                      : "bg-white text-gray-600 hover:text-gray-800 hover:bg-gray-50 shadow-gray-200"
+                  }`}
+                  title="AIアシスタント"
+                >
+                  <span className="text-xl">🤖</span>
+                </button>
+              </div>
+
+              {/* メインコンテンツ */}
+              <div className="flex-1 overflow-auto">
+                <div className="p-4 md:p-8">
+                  {renderContent()}
+                </div>
+              </div>
             </div>
 
-            {/* メインコンテンツエリア */}
-            <div className="flex-1 overflow-auto">
-              <div className="p-4 md:p-8">
-                {renderContent()}
+            {/* 右側: AIチャットカラム */}
+            {isAiChatOpen && (
+              <div className={`
+                ${isAiChatOpen ? 'w-96' : 'w-0'}
+                transition-all duration-300 ease-in-out
+                md:relative absolute md:top-0 top-0 right-0 bottom-0 z-50
+                md:z-auto
+              `}>
+                <AIChat isPremium={isPremium} />
               </div>
-            </div>
+            )}
           </div>
         </div>
       </Authenticated>
