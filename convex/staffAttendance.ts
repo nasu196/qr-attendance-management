@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentUserId } from "./clerkAuth";
 
 // スタッフの月次勤怠データを取得（リファクタリング版）
 // JST変換の責務をフロントエンドに移譲し、バックエンドはUTCに専念する
@@ -9,9 +9,10 @@ export const getStaffMonthlyAttendance = query({
     staffId: v.id("staff"),
     startOfMonth: v.number(), // UTCタイムスタンプ
     endOfMonth: v.number(),   // UTCタイムスタンプ
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -43,9 +44,10 @@ export const getStaffMonthlyAppliedSettings = query({
     staffId: v.id("staff"),
     year: v.number(),
     month: v.number(),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -88,9 +90,10 @@ export const setAppliedWorkSetting = mutation({
     staffId: v.id("staff"),
     date: v.string(),
     workSettingId: v.union(v.id("workSettings"), v.null()),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -126,9 +129,10 @@ export const autoAssignWorkSetting = mutation({
     staffId: v.id("staff"),
     date: v.string(),
     workMinutes: v.number(),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }

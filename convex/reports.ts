@@ -1,15 +1,16 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentUserId } from "./clerkAuth";
 
-// 期間レポートを取得
+// 期間レポートを取得 (Clerk対応版)
 export const getPeriodReport = query({
   args: {
     startDate: v.string(), // YYYY-MM-DD形式
     endDate: v.string(),   // YYYY-MM-DD形式
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -31,6 +32,7 @@ export const getPeriodReport = query({
       .withIndex("by_date", (q) => 
         q.gte("timestamp", startOfPeriod).lte("timestamp", endOfPeriod)
       )
+      .filter((q) => q.eq(q.field("createdBy"), userId))
       .collect();
 
     // スタッフ別レポートを生成

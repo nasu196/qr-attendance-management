@@ -1,4 +1,5 @@
 import { useQuery } from "convex/react";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { formatToJST } from "@/lib/timezone";
@@ -10,6 +11,9 @@ interface MonthlyCalendarProps {
 }
 
 export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
+  const { user } = useUser();
+  const clerkUserId = user?.id;
+  
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -18,13 +22,14 @@ export function MonthlyCalendar({ isPremium }: MonthlyCalendarProps) {
   const [selectedStaffId, setSelectedStaffId] = useState<Id<"staff"> | null>(null);
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
 
-  // React Hooksは必ず条件分岐の外で呼ぶ
-  const staffList = useQuery(api.staff.getStaffList);
-  const allUsedTags = useQuery(api.staff.getAllUsedTags);
-  const calendarData = useQuery(api.calendar.getMonthlyCalendar, {
+  // React Hooksは必ず条件分岐の外で呼ぶ（Clerk対応）
+  const staffList = useQuery(api.staff.getStaffList, clerkUserId ? { clerkUserId } : "skip");
+  const allUsedTags = useQuery(api.staff.getAllUsedTags, clerkUserId ? { clerkUserId } : "skip");
+  const calendarData = useQuery(api.calendar.getMonthlyCalendar, clerkUserId ? {
     year: currentDate.year,
     month: currentDate.month,
-  });
+    clerkUserId,
+  } : "skip");
 
   // スタッフ詳細表示中の場合
   if (selectedStaffId) {

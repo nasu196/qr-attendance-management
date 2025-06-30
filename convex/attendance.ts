@@ -1,12 +1,16 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentUserId } from "./clerkAuth";
 import { Doc, Id } from "./_generated/dataModel";
 
-// 今日の勤怠一覧を取得 (リファクタリング・復活版)
+// 今日の勤怠一覧を取得 (Clerk対応版)
 export const getTodayAttendance = query({
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: {
+    clerkUserId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       return [];
     }
@@ -340,10 +344,13 @@ export const recordAttendanceByQR = mutation({
 // 古いupdateAttendanceとdeleteAttendance関数を削除
 // 現在はcorrectAttendanceとdeletePairを使用
 
-// 過去30日分のダミーデータを作成
-export const createAttendanceDummyData =
-  mutation(async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+// 過去30日分のダミーデータを作成 (Clerk対応版)
+export const createAttendanceDummyData = mutation({
+  args: {
+    clerkUserId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -357,12 +364,14 @@ export const createAttendanceDummyData =
       throw new Error("スタッフが登録されていません。先にスタッフを登録してください。");
     }
 
-    // 既存の勤怠データをすべて削除
-    const allAttendance = await ctx.db.query("attendance").collect();
+    // 既存の勤怠データをすべて削除（このユーザーのみ）
+    const allAttendance = await ctx.db
+      .query("attendance")
+      .filter((q) => q.eq(q.field("createdBy"), userId))
+      .collect();
+    
     for (const record of allAttendance) {
-      if (record.createdBy === userId) {
-        await ctx.db.delete(record._id);
-      }
+      await ctx.db.delete(record._id);
     }
 
     const today = new Date();
@@ -413,7 +422,8 @@ export const createAttendanceDummyData =
     }
 
     return { success: true, message: "過去30日間の日勤ダミーデータを作成しました。" };
-  });
+  }
+});
 
 // 2025年5月・6月のダミーデータを作成
 export const create2025MayJuneDummyData = mutation({
@@ -862,7 +872,7 @@ export const deletePair = mutation({
 // 開発環境クリーンアップ用（本番では使用禁止）
 export const cleanupDevData = mutation({
   args: {},
-  handler: async (ctx, args) => {
+  handler: async (ctx, _args) => {
     // 開発環境専用のため認証チェックを一時的に無効化
 
     // 全ての勤怠記録を削除

@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -7,9 +8,12 @@ interface AttendanceDashboardProps {
   isPremium: boolean;
 }
 
-export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
-  // 今日の勤怠データから統計を計算
-  const todayAttendance = useQuery(api.attendance.getTodayAttendance);
+export function AttendanceDashboard({ isPremium: _isPremium }: AttendanceDashboardProps) {
+  const { user } = useUser();
+  const clerkUserId = user?.id;
+  
+  // 今日の勤怠データから統計を計算（Clerk対応）
+  const todayAttendance = useQuery(api.attendance.getTodayAttendance, clerkUserId ? { clerkUserId } : "skip");
   
   // エラー検出関数
   const detectBasicErrors = (attendance: any) => {
@@ -88,9 +92,10 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
   
   const correctAttendance = useMutation(api.attendance.correctAttendance);
   const createDummyData = useMutation(api.attendance.createTodayDummyData);
+  const createAttendanceDummyData = useMutation(api.attendance.createAttendanceDummyData);
   const create2025MayJuneDummyData = useMutation(api.attendance.create2025MayJuneDummyData);
   const cleanupDevData = useMutation(api.attendance.cleanupDevData);
-  const [selectedStaff, setSelectedStaff] = useState<string | null>(null);
+  const [_selectedStaff, _setSelectedStaff] = useState<string | null>(null);
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [correctionData, setCorrectionData] = useState({
     staffId: "",
@@ -193,7 +198,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
       });
       toast.success("勤怠記録を修正しました");
       closeCorrectionModal();
-    } catch (error) {
+    } catch {
       toast.error("修正に失敗しました");
     }
   };
@@ -202,7 +207,16 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     try {
       await createDummyData();
       toast.success("本日のダミーデータを作成しました");
-    } catch (error) {
+    } catch {
+      toast.error("ダミーデータの作成に失敗しました");
+    }
+  };
+
+  const handleCreateAttendanceDummyData = async () => {
+    try {
+      await createAttendanceDummyData(clerkUserId ? { clerkUserId } : {});
+      toast.success("過去30日間のダミーデータを作成しました");
+    } catch {
       toast.error("ダミーデータの作成に失敗しました");
     }
   };
@@ -211,7 +225,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     try {
       const result = await create2025MayJuneDummyData();
       toast.success(result.message);
-    } catch (error) {
+    } catch {
       toast.error("2025年5月・6月のダミーデータ作成に失敗しました");
     }
   };
@@ -224,7 +238,7 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
     try {
       const result = await cleanupDevData();
       toast.success(`データを削除しました（勤怠記録: ${result.deletedAttendance}件、履歴: ${result.deletedHistory}件）`);
-    } catch (error) {
+    } catch {
       toast.error("データ削除に失敗しました");
     }
   };
@@ -258,6 +272,12 @@ export function AttendanceDashboard({ isPremium }: AttendanceDashboardProps) {
             className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
           >
             本日のダミーデータ作成
+          </button>
+          <button
+            onClick={() => void handleCreateAttendanceDummyData()}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm whitespace-nowrap"
+          >
+            過去30日間のダミーデータ作成
           </button>
           <button
             onClick={() => void handleCreate2025MayJuneDummyData()}

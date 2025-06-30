@@ -1,15 +1,15 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentUserId } from "./clerkAuth";
 
 // スタッフ一覧を取得
 export const getStaffList = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("認証が必要です");
-    }
+  args: {
+    clerkUserId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
 
     return await ctx.db
       .query("staff")
@@ -20,11 +20,13 @@ export const getStaffList = query({
   },
 });
 
-// 無効化されたスタッフ一覧を取得
+// 無効化されたスタッフ一覧を取得 (Clerk対応版)
 export const getInactiveStaffList = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: {
+    clerkUserId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -58,11 +60,13 @@ export const getStaff = query({
   },
 });
 
-// 使用されているタグ一覧を取得
+// 使用されているタグ一覧を取得 (Clerk対応版)
 export const getAllUsedTags = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: {
+    clerkUserId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -88,9 +92,10 @@ export const createStaff = mutation({
   args: {
     name: v.string(),
     tags: v.optional(v.array(v.string())),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -137,9 +142,10 @@ export const updateStaff = mutation({
     staffId: v.id("staff"),
     name: v.string(),
     tags: v.optional(v.array(v.string())),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -162,9 +168,10 @@ export const updateStaff = mutation({
 export const deactivateStaff = mutation({
   args: {
     staffIds: v.array(v.id("staff")),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -184,9 +191,10 @@ export const deactivateStaff = mutation({
 export const reactivateStaff = mutation({
   args: {
     staffIds: v.array(v.id("staff")),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }

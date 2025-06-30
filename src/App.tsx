@@ -1,8 +1,12 @@
-import { Authenticated, Unauthenticated, useQuery } from "convex/react";
+import { Authenticated, Unauthenticated, useQuery, useMutation } from "convex/react";
+import { useUser, SignedIn, SignedOut } from "@clerk/clerk-react";
 import { SignInForm } from "./SignInForm";
 import { SignOutButton } from "./SignOutButton";
+import { ClerkSignIn } from "./components/ClerkSignIn";
+
+import { ClerkUserButton } from "./components/ClerkUserButton";
 import { api } from "../convex/_generated/api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AttendanceDashboard } from "./components/AttendanceDashboard";
 import { StaffList } from "./components/StaffList";
 import { MonthlyCalendar } from "./components/MonthlyCalendar";
@@ -14,12 +18,32 @@ import { AIChat } from "./components/AIChat";
 
 type MenuItem = "dashboard" | "staff" | "qr-url" | "report" | "calendar" | "work-settings" | "help";
 
+// 認証モードの設定: Clerk環境変数が設定されていればClerk、そうでなければConvex
+const AUTH_MODE = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ? 'clerk' : 'convex';
+
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<MenuItem>("dashboard");
   const [isPremium, setIsPremium] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
-  const user = useQuery(api.auth.loggedInUser);
+  
+  // Convex認証
+  const convexUser = useQuery(api.auth.loggedInUser);
+  
+  // Clerk認証
+  const { isSignedIn, user: clerkUser } = useUser();
+  const createOrUpdateUser = useMutation(api.clerkAuth.createOrUpdateUserFromClerk);
+  
+  // Clerkユーザーの情報をConvexに同期
+  useEffect(() => {
+    if (AUTH_MODE === 'clerk' && isSignedIn && clerkUser) {
+      void createOrUpdateUser({
+        clerkUserId: clerkUser.id,
+        email: clerkUser.emailAddresses[0]?.emailAddress || "",
+        name: clerkUser.fullName || clerkUser.firstName || "",
+      });
+    }
+  }, [isSignedIn, clerkUser, createOrUpdateUser]);
 
   const menuItems = [
     { id: "dashboard" as MenuItem, label: "勤怠管理ボード", icon: "📊", premium: false },
@@ -59,6 +83,237 @@ export default function App() {
 
   const currentMenuItem = menuItems.find(item => item.id === activeMenu);
 
+  // 現在のユーザー情報を取得（認証モードに応じて）
+  const currentUser = AUTH_MODE === 'clerk' 
+    ? (clerkUser ? { name: clerkUser.fullName || clerkUser.firstName, email: clerkUser.emailAddresses[0]?.emailAddress } : null)
+    : convexUser;
+
+  // Clerk認証モードの場合
+  if (AUTH_MODE === 'clerk') {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <SignedOut>
+          <ClerkSignIn />
+        </SignedOut>
+        
+        <SignedIn>
+          <div className="flex h-screen">
+            {/* デスクトップ用サイドバー */}
+            <div className="hidden md:flex w-64 bg-white shadow-lg flex-col">
+              <div className="p-6 border-b border-gray-200">
+                <h1 className="text-xl font-bold text-gray-900">勤怠管理システム</h1>
+                {currentUser && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {currentUser.name || currentUser.email}
+                  </p>
+                )}
+              </div>
+              
+              <nav className="flex-1 p-4">
+                <ul className="space-y-2">
+                  {menuItems.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        onClick={() => handleMenuClick(item.id)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                          activeMenu === item.id
+                            ? "bg-blue-100 text-blue-700 font-medium"
+                            : "text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span className="text-lg">{item.icon}</span>
+                        <span className="flex-1">{item.label}</span>
+                        {item.premium && !isPremium && (
+                          <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                            Pro
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+              
+              <div className="p-4 border-t border-gray-200">
+                {/* 開発用プレミアムスイッチ */}
+                <div className="mb-4">
+                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={isPremium}
+                      onChange={(e) => setIsPremium(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    開発用: 有料プラン
+                  </label>
+                </div>
+                <div className="flex items-center justify-center">
+                  <ClerkUserButton />
+                </div>
+              </div>
+            </div>
+
+            {/* モバイル用オーバーレイメニュー */}
+            {isMobileMenuOpen && (
+              <div className="md:hidden fixed inset-0 z-50 flex">
+                {/* オーバーレイ背景 */}
+                <div 
+                  className="flex-1 bg-black bg-opacity-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                ></div>
+                
+                {/* メニューパネル */}
+                <div className="w-64 bg-white shadow-lg flex flex-col">
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h1 className="text-xl font-bold text-gray-900">勤怠管理システム</h1>
+                        {currentUser && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            {currentUser.name || currentUser.email}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="text-gray-400 hover:text-gray-600 text-2xl"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <nav className="flex-1 p-4">
+                    <ul className="space-y-2">
+                      {menuItems.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            onClick={() => handleMenuClick(item.id)}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                              activeMenu === item.id
+                                ? "bg-blue-100 text-blue-700 font-medium"
+                                : "text-gray-700 hover:bg-gray-100"
+                            }`}
+                          >
+                            <span className="text-lg">{item.icon}</span>
+                            <span className="flex-1">{item.label}</span>
+                            {item.premium && !isPremium && (
+                              <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                                Pro
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </nav>
+                  
+                  <div className="p-4 border-t border-gray-200">
+                    {/* 開発用プレミアムスイッチ */}
+                    <div className="mb-4">
+                      <label className="flex items-center gap-2 text-sm text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={isPremium}
+                          onChange={(e) => setIsPremium(e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                        開発用: 有料プラン
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <ClerkUserButton />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* メインコンテンツエリア全体 */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* 左側: メインコンテンツ */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* モバイル用ヘッダー */}
+                <div className="md:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{currentMenuItem?.icon}</span>
+                    <h1 className="text-lg font-semibold text-gray-900">{currentMenuItem?.label}</h1>
+                    {currentMenuItem?.premium && !isPremium && (
+                      <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                        Pro
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* AI チャットスイッチ（モバイル） */}
+                    <button
+                      onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        isAiChatOpen 
+                          ? "bg-purple-100 text-purple-600" 
+                          : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                      }`}
+                      title="AIアシスタント"
+                    >
+                      🤖
+                    </button>
+                    <ClerkUserButton />
+                    <button
+                      onClick={() => setIsMobileMenuOpen(true)}
+                      className="text-gray-600 hover:text-gray-800 p-2"
+                    >
+                      <div className="space-y-1">
+                        <div className="w-5 h-0.5 bg-current"></div>
+                        <div className="w-5 h-0.5 bg-current"></div>
+                        <div className="w-5 h-0.5 bg-current"></div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* デスクトップ用右上コントロール */}
+                <div className="hidden md:flex absolute top-4 right-4 z-10 items-center gap-3">
+                  <ClerkUserButton />
+                  <button
+                    onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+                    className={`p-3 rounded-lg shadow-lg transition-colors ${
+                      isAiChatOpen 
+                        ? "bg-purple-100 text-purple-600 shadow-purple-200" 
+                        : "bg-white text-gray-600 hover:text-gray-800 hover:bg-gray-50 shadow-gray-200"
+                    }`}
+                    title="AIアシスタント"
+                  >
+                    <span className="text-xl">🤖</span>
+                  </button>
+                </div>
+
+                {/* メインコンテンツ */}
+                <div className="flex-1 overflow-auto">
+                  <div className="p-4 md:p-8">
+                    {renderContent()}
+                  </div>
+                </div>
+              </div>
+
+              {/* 右側: AIチャットカラム */}
+              {isAiChatOpen && (
+                <div className={`
+                  ${isAiChatOpen ? 'w-96' : 'w-0'}
+                  transition-all duration-300 ease-in-out
+                  md:relative absolute md:top-0 top-0 right-0 bottom-0 z-50
+                  md:z-auto
+                `}>
+                  <AIChat isPremium={isPremium} />
+                </div>
+              )}
+            </div>
+          </div>
+        </SignedIn>
+      </main>
+    );
+  }
+
+  // Convex認証モード（従来の実装）
   return (
     <main className="min-h-screen bg-gray-50">
       <Unauthenticated>
@@ -81,9 +336,9 @@ export default function App() {
           <div className="hidden md:flex w-64 bg-white shadow-lg flex-col">
             <div className="p-6 border-b border-gray-200">
               <h1 className="text-xl font-bold text-gray-900">勤怠管理システム</h1>
-              {user && (
+              {convexUser && (
                 <p className="text-sm text-gray-600 mt-1">
-                  {user.name || user.email}
+                  {convexUser.name || convexUser.email}
                 </p>
               )}
             </div>
@@ -145,9 +400,9 @@ export default function App() {
                   <div className="flex justify-between items-start">
                     <div>
                       <h1 className="text-xl font-bold text-gray-900">勤怠管理システム</h1>
-                      {user && (
+                      {convexUser && (
                         <p className="text-sm text-gray-600 mt-1">
-                          {user.name || user.email}
+                          {convexUser.name || convexUser.email}
                         </p>
                       )}
                     </div>

@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -14,10 +15,13 @@ interface StaffListProps {
 }
 
 export function StaffList({ isPremium }: StaffListProps) {
-  const staffList = useQuery(api.staff.getStaffList);
-  const inactiveStaffList = useQuery(api.staff.getInactiveStaffList);
-  const allUsedTags = useQuery(api.staff.getAllUsedTags);
-  const createDummyData = useMutation(api.staff.createDummyData);
+  const { user } = useUser();
+  const clerkUserId = user?.id;
+  
+  const staffList = useQuery(api.staff.getStaffList, clerkUserId ? { clerkUserId } : "skip");
+  const inactiveStaffList = useQuery(api.staff.getInactiveStaffList, clerkUserId ? { clerkUserId } : "skip");
+  const allUsedTags = useQuery(api.staff.getAllUsedTags, clerkUserId ? { clerkUserId } : "skip");
+
   const createAttendanceDummyData = useMutation(api.attendance.createAttendanceDummyData);
   const createStaff = useMutation(api.staff.createStaff);
   const updateStaff = useMutation(api.staff.updateStaff);
@@ -81,10 +85,9 @@ export function StaffList({ isPremium }: StaffListProps) {
 
   const handleCreateDummyData = async () => {
     try {
-      await createDummyData({});
-      await createAttendanceDummyData({});
+      await createAttendanceDummyData(clerkUserId ? { clerkUserId } : {});
       toast.success("ダミーデータを作成しました");
-    } catch (error) {
+    } catch {
       toast.error("エラーが発生しました");
     }
   };
@@ -92,28 +95,30 @@ export function StaffList({ isPremium }: StaffListProps) {
   const handleDeactivateSelected = async () => {
     if (selectedStaff.length === 0) return;
     
-    if (confirm(`選択した${selectedStaff.length}名のスタッフを無効化しますか？`)) {
-      try {
-        await deactivateStaff({ staffIds: selectedStaff });
-        toast.success(`${selectedStaff.length}名のスタッフを無効化しました`);
-        setSelectedStaff([]);
-      } catch (error) {
-        toast.error("エラーが発生しました");
-      }
+    try {
+      await deactivateStaff({ 
+        staffIds: selectedStaff,
+        clerkUserId: clerkUserId,
+      });
+      toast.success(`${selectedStaff.length}名のスタッフを無効化しました`);
+      setSelectedStaff([]);
+    } catch {
+      toast.error("エラーが発生しました");
     }
   };
 
   const handleReactivateSelected = async () => {
     if (selectedInactiveStaff.length === 0) return;
     
-    if (confirm(`選択した${selectedInactiveStaff.length}名のスタッフを有効化しますか？`)) {
-      try {
-        await reactivateStaff({ staffIds: selectedInactiveStaff });
-        toast.success(`${selectedInactiveStaff.length}名のスタッフを有効化しました`);
-        setSelectedInactiveStaff([]);
-      } catch (error) {
-        toast.error("エラーが発生しました");
-      }
+    try {
+      await reactivateStaff({ 
+        staffIds: selectedInactiveStaff,
+        clerkUserId: clerkUserId,
+      });
+      toast.success(`${selectedInactiveStaff.length}名のスタッフを有効化しました`);
+      setSelectedInactiveStaff([]);
+    } catch {
+      toast.error("エラーが発生しました");
     }
   };
 
@@ -182,9 +187,12 @@ export function StaffList({ isPremium }: StaffListProps) {
 
   const handleSingleReactivate = async (staffId: Id<"staff">) => {
     try {
-      await reactivateStaff({ staffIds: [staffId] });
+      await reactivateStaff({ 
+        staffIds: [staffId],
+        clerkUserId: clerkUserId,
+      });
       toast.success("スタッフを有効化しました");
-    } catch (error) {
+    } catch {
       toast.error("エラーが発生しました");
     }
   };
@@ -205,6 +213,7 @@ export function StaffList({ isPremium }: StaffListProps) {
             staffId,
             name: staff.name,
             tags: bulkTags.length > 0 ? bulkTags : undefined,
+            clerkUserId: clerkUserId,
           });
         }
       }
@@ -212,7 +221,7 @@ export function StaffList({ isPremium }: StaffListProps) {
       setShowBulkTagModal(false);
       setBulkTags([]);
       setSelectedStaff([]);
-    } catch (error) {
+    } catch {
       toast.error("エラーが発生しました");
     }
   };
@@ -231,12 +240,13 @@ export function StaffList({ isPremium }: StaffListProps) {
       await createStaff({
         name: formData.name.trim(),
         tags: formData.tags.length > 0 ? formData.tags : undefined,
+        clerkUserId: clerkUserId,
       });
       
       toast.success("スタッフを追加しました");
       setShowAddModal(false);
       setFormData({ name: "", tags: [] });
-    } catch (error) {
+    } catch {
       toast.error("エラーが発生しました");
     }
   };
@@ -274,11 +284,12 @@ export function StaffList({ isPremium }: StaffListProps) {
         staffId: editingStaffId,
         name: formData.name.trim(),
         tags: formData.tags.length > 0 ? formData.tags : undefined,
+        clerkUserId: clerkUserId,
       });
       
       toast.success("スタッフ情報を更新しました");
       closeEditModal();
-    } catch (error) {
+    } catch {
       toast.error("エラーが発生しました");
     }
   };
@@ -300,7 +311,7 @@ export function StaffList({ isPremium }: StaffListProps) {
         <div className="flex gap-2">
           {staffList.length === 0 && (
             <button
-              onClick={handleCreateDummyData}
+              onClick={() => void handleCreateDummyData()}
               className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
             >
               ダミーデータ作成
@@ -336,7 +347,7 @@ export function StaffList({ isPremium }: StaffListProps) {
                 </button>
               </div>
               
-              <form onSubmit={handleSubmitStaff} className="space-y-4">
+              <form onSubmit={(e) => void handleSubmitStaff(e)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     氏名 <span className="text-red-500">*</span>
@@ -393,7 +404,7 @@ export function StaffList({ isPremium }: StaffListProps) {
                 </button>
               </div>
               
-              <form onSubmit={handleUpdateStaff} className="space-y-4">
+              <form onSubmit={(e) => void handleUpdateStaff(e)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     氏名 <span className="text-red-500">*</span>
@@ -446,7 +457,7 @@ export function StaffList({ isPremium }: StaffListProps) {
             </span>
             <div className="flex gap-2">
               <button 
-                onClick={() => handleQRCode(selectedStaff)}
+                onClick={() => void handleQRCode(selectedStaff)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 QRコード一括印刷
@@ -458,7 +469,7 @@ export function StaffList({ isPremium }: StaffListProps) {
                 タグ一括編集
               </button>
               <button
-                onClick={handleDeactivateSelected}
+                onClick={() => void handleDeactivateSelected()}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
                 一括無効化
@@ -477,7 +488,7 @@ export function StaffList({ isPremium }: StaffListProps) {
             </span>
             <div className="flex gap-2">
               <button
-                onClick={handleReactivateSelected}
+                onClick={() => void handleReactivateSelected()}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
               >
                 一括有効化
@@ -494,7 +505,7 @@ export function StaffList({ isPremium }: StaffListProps) {
             <h2 className="text-lg font-semibold mb-4">タグ一括編集 ({selectedStaff.length}名)</h2>
             <TagInput tags={bulkTags} onTagsChange={setBulkTags} availableTags={allUsedTags || []} />
             <div className="flex gap-2 pt-4">
-              <button onClick={handleBulkTagSave} className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg">
+              <button onClick={() => void handleBulkTagSave()} className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg">
                 適用
               </button>
               <button onClick={() => setShowBulkTagModal(false)} className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg">
@@ -575,7 +586,7 @@ export function StaffList({ isPremium }: StaffListProps) {
                     
                     <div className="flex gap-2">
                       <button 
-                        onClick={() => handleSingleReactivate(staff._id)}
+                        onClick={() => void handleSingleReactivate(staff._id)}
                         className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                       >
                         有効化
@@ -639,7 +650,7 @@ export function StaffList({ isPremium }: StaffListProps) {
                         詳細
                       </button>
                       <button 
-                        onClick={() => handleQRCode([staff._id])}
+                        onClick={() => void handleQRCode([staff._id])}
                         className="text-green-600 hover:text-green-800 text-sm font-medium"
                       >
                         QRコード

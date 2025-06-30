@@ -17,6 +17,7 @@ import type * as aiChat from "../aiChat.js";
 import type * as attendance from "../attendance.js";
 import type * as auth from "../auth.js";
 import type * as calendar from "../calendar.js";
+import type * as clerkAuth from "../clerkAuth.js";
 import type * as help from "../help.js";
 import type * as http from "../http.js";
 import type * as qrAttendanceUrl from "../qrAttendanceUrl.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   attendance: typeof attendance;
   auth: typeof auth;
   calendar: typeof calendar;
+  clerkAuth: typeof clerkAuth;
   help: typeof help;
   http: typeof http;
   qrAttendanceUrl: typeof qrAttendanceUrl;

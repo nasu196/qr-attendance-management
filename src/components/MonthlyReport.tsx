@@ -1,4 +1,5 @@
 import { useQuery } from "convex/react";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -12,6 +13,8 @@ interface MonthlyReportProps {
 type PeriodType = "thisMonth" | "lastMonth" | "thisYear" | "lastYear" | "last12Months" | "custom";
 
 export function MonthlyReport({ isPremium }: MonthlyReportProps) {
+  const { user } = useUser();
+  const clerkUserId = user?.id;
   const [periodType, setPeriodType] = useState<PeriodType>("thisMonth");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
@@ -84,12 +87,12 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
 
   const { startDate, endDate } = calculatePeriod(periodType);
 
-  // useQueryは常に同じ順序で呼ぶ必要がある
+  // useQueryは常に同じ順序で呼ぶ必要がある（Clerk対応）
   const periodReport = useQuery(api.reports.getPeriodReport, 
-    startDate && endDate && isPremium ? { startDate, endDate } : "skip"
+    startDate && endDate && isPremium && clerkUserId ? { startDate, endDate, clerkUserId } : "skip"
   );
-  const allUsedTags = useQuery(api.staff.getAllUsedTags);
-  const staffList = useQuery(api.staff.getStaffList);
+  const allUsedTags = useQuery(api.staff.getAllUsedTags, clerkUserId ? { clerkUserId } : "skip");
+  const staffList = useQuery(api.staff.getStaffList, clerkUserId ? { clerkUserId } : "skip");
 
   // カスタム期間選択の処理
   const handleCustomPeriodSelect = () => {
@@ -108,7 +111,7 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
     toast.success("カスタム期間を設定しました");
   };
 
-  const openCustomModal = () => {
+  const _openCustomModal = () => {
     // デフォルト値を今月に設定
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
@@ -120,10 +123,10 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
   };
 
   // スタッフ詳細表示の処理
-  const handleStaffClick = (staffId: Id<"staff">) => {
+  const _handleStaffClick = (_staffId: Id<"staff">) => {
     // 今月または先月の場合のみスタッフ詳細に遷移
     if (periodType === "thisMonth" || periodType === "lastMonth") {
-      setSelectedStaffId(staffId);
+      setSelectedStaffId(_staffId);
     }
   };
 
@@ -332,11 +335,11 @@ export function MonthlyReport({ isPremium }: MonthlyReportProps) {
     toast.success("CSVファイルをダウンロードしました");
   };
 
-  const handleSort = (column: typeof sortBy) => {
-    if (sortBy === column) {
+  const _handleSort = (_column: typeof sortBy) => {
+    if (sortBy === _column) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
-      setSortBy(column);
+      setSortBy(_column);
       setSortOrder("asc");
     }
   };

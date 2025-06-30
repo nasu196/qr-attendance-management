@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -10,12 +11,16 @@ interface WorkSettingsProps {
 }
 
 export function WorkSettings({ isPremium }: WorkSettingsProps) {
-  const workSettings = useQuery(api.workSettings.getWorkSettings);
+  const { user } = useUser();
+  const clerkUserId = user?.id;
+  
+  const workSettings = useQuery(api.workSettings.getWorkSettings, clerkUserId ? { clerkUserId } : "skip");
   const createWorkSetting = useMutation(api.workSettings.createWorkSetting);
   const updateWorkSetting = useMutation(api.workSettings.updateWorkSetting);
   const deleteWorkSetting = useMutation(api.workSettings.deleteWorkSetting);
   const setDefaultWorkSetting = useMutation(api.workSettings.setDefaultWorkSetting);
   const createInitialSettings = useMutation(api.workSettings.createInitialSettings);
+
   
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<Id<"workSettings"> | null>(null);
@@ -25,14 +30,14 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
     breakHours: 1,
   });
 
-  // 初期設定を作成
+  // 初期設定を作成（日勤・夜勤のみ）
   useEffect(() => {
-    if (isPremium && workSettings && workSettings.length === 0) {
-      createInitialSettings().catch(() => {
+    if (isPremium && workSettings && workSettings.length === 0 && clerkUserId) {
+      createInitialSettings(clerkUserId ? { clerkUserId } : {}).catch(() => {
         // エラーは無視（既に設定がある場合など）
       });
     }
-  }, [isPremium, workSettings, createInitialSettings]);
+  }, [isPremium, workSettings, createInitialSettings, clerkUserId]);
 
   // プロプランでない場合はティザー表示
   if (!isPremium) {
@@ -47,12 +52,12 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
         
         <div className="relative bg-white rounded-lg shadow p-6">
           <div className="filter blur-sm pointer-events-none">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 3 }, (_, i) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Array.from({ length: 2 }, (_, i) => (
                 <div key={i} className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">
-                      {i === 0 ? "日勤" : i === 1 ? "夜勤" : "パート"}
+                      {i === 0 ? "日勤（8時間）" : "夜勤（16時間）"}
                     </h3>
                     {i === 0 && (
                       <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
@@ -66,21 +71,23 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
                         <span>⏰</span> 労働時間
                       </span>
                       <span className="text-sm font-medium text-gray-900">
-                        {i === 0 ? "8時間" : i === 1 ? "10時間" : "4時間"}
+                        {i === 0 ? "8時間" : "16時間"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600 flex items-center gap-1">
                         <span>☕</span> 休憩時間
                       </span>
-                      <span className="text-sm font-medium text-gray-900">1時間</span>
+                      <span className="text-sm font-medium text-gray-900">
+                        {i === 0 ? "1時間" : "2時間"}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center border-t pt-2">
                       <span className="text-sm text-gray-600 flex items-center gap-1">
                         <span>📊</span> 総勤務時間
                       </span>
                       <span className="text-sm font-semibold text-blue-600">
-                        {i === 0 ? "9時間" : i === 1 ? "11時間" : "5時間"}
+                        {i === 0 ? "9時間" : "18時間"}
                       </span>
                     </div>
                   </div>
@@ -143,6 +150,7 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
           name: formData.name,
           workHours: formData.workHours,
           breakHours: formData.breakHours,
+          clerkUserId,
         });
         toast.success("勤務設定を更新しました");
       } else {
@@ -150,6 +158,7 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
           name: formData.name,
           workHours: formData.workHours,
           breakHours: formData.breakHours,
+          clerkUserId,
         });
         toast.success("勤務設定を作成しました");
       }
@@ -182,7 +191,7 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
 
   const handleSetDefault = async (settingId: Id<"workSettings">) => {
     try {
-      await setDefaultWorkSetting({ settingId });
+      await setDefaultWorkSetting({ settingId, clerkUserId });
       toast.success("デフォルト設定を変更しました");
     } catch (error: any) {
       toast.error(error.message || "設定に失敗しました");

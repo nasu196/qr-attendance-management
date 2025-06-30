@@ -1,15 +1,16 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentUserId } from "./clerkAuth";
 
-// 月次カレンダーデータを取得
+// 月次カレンダーデータを取得 (Clerk対応版)
 export const getMonthlyCalendar = query({
   args: {
     year: v.number(),
     month: v.number(),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }
@@ -131,9 +132,10 @@ export const getMonthlyAttendanceStatus = query({
   args: {
     startOfMonth: v.number(), // UTCタイムスタンプ
     endOfMonth: v.number(),   // UTCタイムスタンプ
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx, args.clerkUserId);
     if (!userId) {
       throw new Error("認証が必要です");
     }

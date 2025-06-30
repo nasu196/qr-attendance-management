@@ -1,9 +1,10 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { toast } from "sonner";
-import { formatToJST, convertToUTC, getStartOfJSTDay, getEndOfJSTDay } from "@/lib/timezone";
+import { formatToJST, getStartOfJSTDay, getEndOfJSTDay } from "@/lib/timezone";
+import { useUser } from "@clerk/clerk-react";
 
 interface StaffDetailProps {
   staffId: Id<"staff">;
@@ -14,11 +15,23 @@ interface StaffDetailProps {
 }
 
 export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMonth }: StaffDetailProps) {
-  const staff = useQuery(api.staff.getStaffList)?.find(s => s._id === staffId);
+  const { user } = useUser();
+  const clerkUserId = user?.id;
+  
+  const staffList = useQuery(
+    clerkUserId ? api.staff.getStaffList : ("skip" as any),
+    clerkUserId ? { clerkUserId } : undefined
+  );
+  const staff = staffList?.find(s => s._id === staffId);
+  
   const correctAttendance = useMutation(api.attendance.correctAttendance);
   const deletePair = useMutation(api.attendance.deletePair);
   const createAttendancePair = useMutation(api.attendance.createAttendancePair);
-  const workSettings = useQuery(api.workSettings.getWorkSettings);
+  
+  const workSettings = useQuery(
+    clerkUserId ? api.workSettings.getWorkSettings : ("skip" as any),
+    clerkUserId ? { clerkUserId } : undefined
+  );
   
   const [currentDate, setCurrentDate] = useState(() => {
     if (initialYear && initialMonth) {
@@ -32,17 +45,25 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
   const startOfMonth = getStartOfJSTDay(new Date(currentDate.year, currentDate.month - 1, 1));
   const endOfMonth = getEndOfJSTDay(new Date(currentDate.year, currentDate.month, 0));
 
-  const monthlyAttendance = useQuery(api.staffAttendance.getStaffMonthlyAttendance, {
-    staffId,
-    startOfMonth,
-    endOfMonth,
-  });
+  const monthlyAttendance = useQuery(
+    clerkUserId ? api.staffAttendance.getStaffMonthlyAttendance : ("skip" as any),
+    clerkUserId ? {
+      staffId,
+      startOfMonth,
+      endOfMonth,
+      clerkUserId,
+    } : undefined
+  );
 
-  const appliedSettings = useQuery(api.staffAttendance.getStaffMonthlyAppliedSettings, {
-    staffId,
-    year: currentDate.year,
-    month: currentDate.month,
-  });
+  const appliedSettings = useQuery(
+    clerkUserId ? api.staffAttendance.getStaffMonthlyAppliedSettings : ("skip" as any),
+    clerkUserId ? {
+      staffId,
+      year: currentDate.year,
+      month: currentDate.month,
+      clerkUserId,
+    } : undefined
+  );
 
   const setAppliedWorkSetting = useMutation(api.staffAttendance.setAppliedWorkSetting);
   const autoAssignWorkSetting = useMutation(api.staffAttendance.autoAssignWorkSetting);
@@ -82,12 +103,13 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
         staffId,
         date,
         workMinutes,
+        clerkUserId,
       });
       // 成功した場合のみログ出力（デバッグ用）
       if (result.success && result.setting) {
         console.log(`自動割り当て完了: ${date} - ${result.setting.name}`);
       }
-    } catch (error) {
+    } catch {
       // エラーは無視（既に設定がある場合など）
       console.log(`自動割り当てスキップ: ${date}`);
     }
@@ -223,18 +245,21 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
           staffId,
           date,
           workSettingId: null,
+          clerkUserId,
         });
       } else if (settingId === 'null') {
         await setAppliedWorkSetting({
           staffId,
           date,
           workSettingId: null,
+          clerkUserId,
         });
       } else {
         await setAppliedWorkSetting({
           staffId,
           date,
           workSettingId: settingId as any,
+          clerkUserId,
         });
       }
       
@@ -245,7 +270,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
         newSettings.set(date, settingId);
       }
       setSelectedSettings(newSettings);
-    } catch (error) {
+    } catch {
       toast.error("設定の変更に失敗しました");
     }
   };
@@ -555,7 +580,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       });
       toast.success("勤怠記録を削除しました");
       closeDeleteModal();
-    } catch (error) {
+    } catch {
       toast.error("削除に失敗しました");
     }
   };
@@ -614,7 +639,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       setSelectedSettings(newSettings);
       
       closeCorrectionModal();
-    } catch (error) {
+    } catch {
       toast.error("修正に失敗しました");
     }
   };
@@ -666,7 +691,7 @@ export function StaffDetail({ staffId, onBack, isPremium, initialYear, initialMo
       });
       toast.success("新しい勤怠記録を作成しました");
       closeNewRecordModal();
-    } catch (error) {
+    } catch {
       toast.error("作成に失敗しました");
     }
   };

@@ -2,6 +2,21 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
 
+// Clerk用のユーザーテーブル定義（authTablesのusersテーブルを拡張）
+const customUserTable = defineTable({
+  name: v.optional(v.string()),
+  email: v.optional(v.string()),
+  phone: v.optional(v.string()),
+  image: v.optional(v.string()),
+  emailVerificationTime: v.optional(v.number()),
+  phoneVerificationTime: v.optional(v.number()),
+  isAnonymous: v.optional(v.boolean()),
+  clerkUserId: v.optional(v.string()), // Clerk User IDを追加
+})
+  .index("clerkUserId", ["clerkUserId"])
+  .index("email", ["email"])
+  .index("phone", ["phone"]);
+
 const applicationTables = {
   staff: defineTable({
     name: v.string(),
@@ -88,5 +103,6 @@ const applicationTables = {
 
 export default defineSchema({
   ...authTables,
+  users: customUserTable, // 拡張されたusersテーブルで上書き
   ...applicationTables,
 });
