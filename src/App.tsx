@@ -4,6 +4,7 @@ import { ClerkUserButton } from "./components/ClerkUserButton";
 import { useState } from "react";
 import { AttendanceDashboard } from "./components/AttendanceDashboard";
 import { StaffList } from "./components/StaffList";
+import { StaffDetail } from "./components/StaffDetail";
 import { MonthlyCalendar } from "./components/MonthlyCalendar";
 import { MonthlyReport } from "./components/MonthlyReport";
 import { WorkSettings } from "./components/WorkSettings";
@@ -11,13 +12,16 @@ import { QRAttendanceUrl } from "./components/QRAttendanceUrl";
 import Help from "./components/Help";
 import { AIChat } from "./components/AIChat";
 
-type MenuItem = "dashboard" | "staff" | "qr-url" | "report" | "calendar" | "work-settings" | "help";
+type MenuItem = "dashboard" | "staff" | "qr-url" | "report" | "calendar" | "work-settings" | "help" | "staff-detail";
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<MenuItem>("dashboard");
   const [isPremium, setIsPremium] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  
+  // スタッフ詳細表示用のstate
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   
   // Clerk認証
   const { user: clerkUser } = useUser();
@@ -35,6 +39,24 @@ export default function App() {
   const handleMenuClick = (menuId: MenuItem) => {
     setActiveMenu(menuId);
     setIsMobileMenuOpen(false); // モバイルメニューを閉じる
+    
+    // スタッフ詳細以外のページに遷移する場合、選択されたスタッフをクリア
+    if (menuId !== "staff-detail") {
+      setSelectedStaffId(null);
+    }
+  };
+
+  // スタッフ詳細ページに遷移する関数
+  const showStaffDetail = (staffId: string) => {
+    setSelectedStaffId(staffId);
+    setActiveMenu("staff-detail");
+    setIsMobileMenuOpen(false);
+  };
+
+  // スタッフ詳細ページから戻る関数
+  const backFromStaffDetail = () => {
+    setSelectedStaffId(null);
+    setActiveMenu("staff");
   };
 
   const renderContent = () => {
@@ -42,7 +64,26 @@ export default function App() {
       case "dashboard":
         return <AttendanceDashboard isPremium={isPremium} />;
       case "staff":
-        return <StaffList isPremium={isPremium} />;
+        return <StaffList isPremium={isPremium} onShowStaffDetail={showStaffDetail} />;
+      case "staff-detail":
+        return selectedStaffId ? (
+          <StaffDetail 
+            staffId={selectedStaffId} 
+            onBack={backFromStaffDetail}
+            isPremium={isPremium}
+          />
+        ) : (
+          <div className="text-center py-12">
+            <span className="text-gray-400 text-4xl">❌</span>
+            <p className="text-gray-500 mt-4">スタッフが選択されていません</p>
+            <button
+              onClick={() => setActiveMenu("staff")}
+              className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              スタッフ一覧に戻る
+            </button>
+          </div>
+        );
       case "qr-url":
         return <QRAttendanceUrl isPremium={isPremium} />;
       case "work-settings":
@@ -58,7 +99,8 @@ export default function App() {
     }
   };
 
-  const currentMenuItem = menuItems.find(item => item.id === activeMenu);
+  const currentMenuItem = menuItems.find(item => item.id === activeMenu) || 
+    (activeMenu === "staff-detail" ? { id: "staff-detail" as MenuItem, label: "スタッフ詳細", icon: "👤", premium: false } : null);
 
   // 現在のユーザー情報を取得（Clerk認証のみ）
   const currentUser = clerkUser ? { name: clerkUser.fullName || clerkUser.firstName, email: clerkUser.emailAddresses[0]?.emailAddress } : null;
