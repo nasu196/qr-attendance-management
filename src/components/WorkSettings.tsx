@@ -1,10 +1,7 @@
-import { useQuery, useMutation } from "convex/react";
 import { useUser } from "@clerk/clerk-react";
-import { api } from "../../convex/_generated/api";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import React from "react";
-import { Id } from "../../convex/_generated/dataModel";
 
 interface WorkSettingsProps {
   isPremium: boolean;
@@ -14,30 +11,19 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
   const { user } = useUser();
   const clerkUserId = user?.id;
   
-  const workSettings = useQuery(api.workSettings.getWorkSettings, clerkUserId ? { clerkUserId } : "skip");
-  const createWorkSetting = useMutation(api.workSettings.createWorkSetting);
-  const updateWorkSetting = useMutation(api.workSettings.updateWorkSetting);
-  const deleteWorkSetting = useMutation(api.workSettings.deleteWorkSetting);
-  const setDefaultWorkSetting = useMutation(api.workSettings.setDefaultWorkSetting);
-  const createInitialSettings = useMutation(api.workSettings.createInitialSettings);
-
+  // TODO: Supabaseクエリでデータを取得
+  const workSettings = [
+    { _id: '1', name: '日勤', workHours: 8, breakHours: 1, isDefault: true },
+    { _id: '2', name: '夜勤', workHours: 16, breakHours: 2, isDefault: false }
+  ];
   
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingId, setEditingId] = useState<Id<"workSettings"> | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     workHours: 8,
     breakHours: 1,
   });
-
-  // 初期設定を作成（日勤・夜勤のみ）
-  useEffect(() => {
-    if (isPremium && workSettings && workSettings.length === 0 && clerkUserId) {
-      createInitialSettings(clerkUserId ? { clerkUserId } : {}).catch(() => {
-        // エラーは無視（既に設定がある場合など）
-      });
-    }
-  }, [isPremium, workSettings, createInitialSettings, clerkUserId]);
 
   // プロプランでない場合はティザー表示
   if (!isPremium) {
@@ -144,24 +130,9 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
     }
 
     try {
-      if (editingId) {
-        await updateWorkSetting({
-          settingId: editingId,
-          name: formData.name,
-          workHours: formData.workHours,
-          breakHours: formData.breakHours,
-          clerkUserId,
-        });
-        toast.success("勤務設定を更新しました");
-      } else {
-        await createWorkSetting({
-          name: formData.name,
-          workHours: formData.workHours,
-          breakHours: formData.breakHours,
-          clerkUserId,
-        });
-        toast.success("勤務設定を作成しました");
-      }
+      // TODO: Supabaseでの保存処理
+      console.log('TODO: Supabaseに保存', formData);
+      toast.success(editingId ? "勤務設定を更新しました" : "勤務設定を作成しました");
       resetForm();
     } catch (error: any) {
       toast.error(error.message || "保存に失敗しました");
@@ -178,33 +149,27 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
     setShowAddForm(true);
   };
 
-  const handleDelete = async (settingId: Id<"workSettings">) => {
+  const handleDelete = async (settingId: string) => {
     if (!confirm("この勤務設定を削除しますか？")) return;
     
     try {
-      await deleteWorkSetting({ settingId });
+      // TODO: Supabaseでの削除処理
+      console.log('TODO: Supabaseから削除', settingId);
       toast.success("勤務設定を削除しました");
     } catch (error: any) {
       toast.error(error.message || "削除に失敗しました");
     }
   };
 
-  const handleSetDefault = async (settingId: Id<"workSettings">) => {
+  const handleSetDefault = async (settingId: string) => {
     try {
-      await setDefaultWorkSetting({ settingId, clerkUserId });
+      // TODO: Supabaseでのデフォルト設定処理
+      console.log('TODO: Supabaseでデフォルト設定', settingId);
       toast.success("デフォルト設定を変更しました");
     } catch (error: any) {
       toast.error(error.message || "設定に失敗しました");
     }
   };
-
-  if (!workSettings) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -234,76 +199,79 @@ export function WorkSettings({ isPremium }: WorkSettingsProps) {
       </div>
 
       {/* 設定一覧 */}
-      {workSettings.length === 0 ? (
-        <div className="text-center py-12">
-          <span className="text-gray-400 text-4xl">⚙️</span>
-          <p className="text-gray-500 mt-4">勤務設定がありません</p>
-          <p className="text-gray-400 text-sm mt-2">「新しい設定を追加」ボタンから設定を作成してください</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {workSettings.map((setting) => (
-            <div key={setting._id} className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-gray-900">{setting.name}</h3>
-                  {setting.isDefault && (
-                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
-                      デフォルト
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => handleEdit(setting)}
-                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                  >
-                    編集
-                  </button>
-                  {!setting.isDefault && (
-                    <button
-                      onClick={() => void handleDelete(setting._id)}
-                      className="text-red-600 hover:text-red-800 text-sm font-medium ml-2"
-                    >
-                      削除
-                    </button>
-                  )}
-                </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {workSettings.map((setting) => (
+          <div key={setting._id} className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-gray-900">{setting.name}</h3>
+                {setting.isDefault && (
+                  <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
+                    デフォルト
+                  </span>
+                )}
               </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 flex items-center gap-1">
-                    <span>⏰</span> 労働時間
-                  </span>
-                  <span className="text-sm font-medium text-gray-900">{setting.workHours}時間</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 flex items-center gap-1">
-                    <span>☕</span> 休憩時間
-                  </span>
-                  <span className="text-sm font-medium text-gray-900">{setting.breakHours}時間</span>
-                </div>
-                <div className="flex justify-between items-center border-t pt-2">
-                  <span className="text-sm text-gray-600 flex items-center gap-1">
-                    <span>📊</span> 総勤務時間
-                  </span>
-                  <span className="text-sm font-semibold text-blue-600">{setting.workHours + setting.breakHours}時間</span>
-                </div>
-              </div>
-
-              {!setting.isDefault && (
+              <div className="flex gap-1">
                 <button
-                  onClick={() => void handleSetDefault(setting._id)}
-                  className="w-full mt-4 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors font-medium"
+                  onClick={() => handleEdit(setting)}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                 >
-                  デフォルトに設定
+                  編集
                 </button>
-              )}
+                {!setting.isDefault && (
+                  <button
+                    onClick={() => void handleDelete(setting._id)}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium ml-2"
+                  >
+                    削除
+                  </button>
+                )}
+              </div>
             </div>
-          ))}
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600 flex items-center gap-1">
+                  <span>⏰</span> 労働時間
+                </span>
+                <span className="text-sm font-medium text-gray-900">{setting.workHours}時間</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600 flex items-center gap-1">
+                  <span>☕</span> 休憩時間
+                </span>
+                <span className="text-sm font-medium text-gray-900">{setting.breakHours}時間</span>
+              </div>
+              <div className="flex justify-between items-center border-t pt-2">
+                <span className="text-sm text-gray-600 flex items-center gap-1">
+                  <span>📊</span> 総勤務時間
+                </span>
+                <span className="text-sm font-semibold text-blue-600">{setting.workHours + setting.breakHours}時間</span>
+              </div>
+            </div>
+
+            {!setting.isDefault && (
+              <button
+                onClick={() => void handleSetDefault(setting._id)}
+                className="w-full mt-4 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors font-medium"
+              >
+                デフォルトに設定
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* TODO: Supabase移行時に実装する旨を表示 */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 text-yellow-800">
+          <span className="text-2xl">🚧</span>
+          <div>
+            <p className="font-medium">移行作業中</p>
+            <p className="text-sm">勤務設定の追加・編集・削除機能はSupabase移行後に実装されます</p>
+          </div>
         </div>
-      )}
+      </div>
 
       {/* 追加・編集フォーム */}
       {showAddForm && (

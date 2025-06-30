@@ -1,5 +1,3 @@
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
@@ -9,29 +7,21 @@ interface QRAttendanceUrlProps {
 }
 
 export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
-  const qrUrls = useQuery(api.qrAttendanceUrl.getQRAttendanceUrls);
-  const createQRUrl = useMutation(api.qrAttendanceUrl.createQRAttendanceUrl);
-  const updateQRUrl = useMutation(api.qrAttendanceUrl.updateQRAttendanceUrl);
+  // TODO: Supabaseクエリでデータを取得
+  const qrUrls = [
+    {
+      _id: '1',
+      name: 'メイン打刻ページ',
+      urlId: 'main-attendance',
+      createdBy: 'system',
+      isActive: true,
+      _creationTime: Date.now()
+    }
+  ];
+  
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-
-  // デフォルトのQR打刻URLを自動作成
-  useEffect(() => {
-    const initializeDefaultUrl = async () => {
-      if (qrUrls && qrUrls.length === 0) {
-        try {
-          await createQRUrl({
-            name: "メイン打刻ページ",
-          });
-        } catch (error) {
-          console.error("デフォルトURL作成エラー:", error);
-        }
-      }
-    };
-
-    void initializeDefaultUrl();
-  }, [qrUrls, createQRUrl]);
 
   // QRコード生成
   useEffect(() => {
@@ -58,14 +48,6 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
     void generateQRCode();
   }, [qrUrls]);
 
-  if (!qrUrls) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   const mainUrl = qrUrls[0];
   const fullUrl = mainUrl ? `${window.location.origin}/qr/${mainUrl.urlId}` : "";
 
@@ -83,11 +65,10 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
     
     setIsUpdating(true);
     try {
-      await updateQRUrl({
-        qrUrlId: mainUrl._id,
-        name: mainUrl.name,
-      });
-      toast.success("QR打刻URLを更新しました");
+      // TODO: Supabaseでの更新処理
+      console.log('TODO: Supabaseで更新', mainUrl._id);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 模擬遅延
+      toast.success("QR打刻URLを更新しました（模擬）");
       setShowUpdateModal(false);
     } catch (error) {
       toast.error("URL更新に失敗しました");
@@ -114,6 +95,17 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">QR打刻ページ</h1>
         <p className="text-gray-600">スタッフがQRコードで打刻するためのページです</p>
+      </div>
+
+      {/* 移行作業中の通知 */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 text-yellow-800">
+          <span className="text-2xl">🚧</span>
+          <div>
+            <p className="font-medium">移行作業中</p>
+            <p className="text-sm">QR打刻URL管理機能はSupabase移行後に完全実装されます。現在はデモ表示中です。</p>
+          </div>
+        </div>
       </div>
 
       {/* メインQR打刻URL */}
@@ -230,6 +222,11 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
                     新しいQRコードを印刷・配布する必要があります。
                   </p>
                 </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                  <p className="text-sm text-blue-800">
+                    <strong>移行作業中:</strong> 現在はデモ動作です。実際のURL更新機能はSupabase移行後に実装されます。
+                  </p>
+                </div>
               </div>
 
               <div className="flex gap-3">
@@ -238,7 +235,7 @@ export function QRAttendanceUrl({ isPremium }: QRAttendanceUrlProps) {
                   disabled={isUpdating}
                   className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
                 >
-                  {isUpdating ? "更新中..." : "URLを更新する"}
+                  {isUpdating ? "更新中..." : "URLを更新する（デモ）"}
                 </button>
                 <button
                   onClick={() => setShowUpdateModal(false)}

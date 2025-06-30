@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api.js';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -24,11 +22,29 @@ const Help = ({ isPremium }: HelpProps) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
-  // Convexクエリでヘルプデータを取得
-  const allHelpSections = useQuery(api.help.getHelpSections, {});
-  const searchResults = useQuery(api.help.searchHelp, 
-    searchQuery.trim() ? { query: searchQuery } : "skip"
-  );
+  // TODO: Supabaseクエリでヘルプデータを取得
+  const allHelpSections = [
+    {
+      id: '1',
+      title: '基本的な使い方',
+      content: 'システムの基本的な使い方について説明します。',
+      category: 'basic',
+      keywords: ['基本', '使い方', '操作']
+    },
+    {
+      id: '2', 
+      title: 'QRコードの使用方法',
+      content: 'QRコードを使った勤怠管理の方法を説明します。',
+      category: 'qr',
+      keywords: ['QR', 'コード', '勤怠']
+    }
+  ];
+  const searchResults = searchQuery.trim() ? 
+    allHelpSections.filter(section => 
+      section.title.includes(searchQuery) || 
+      section.content.includes(searchQuery) ||
+      section.keywords.some(keyword => keyword.includes(searchQuery))
+    ) : null;
 
   const categories = [
     { id: 'all', name: '全て', icon: '📚' },

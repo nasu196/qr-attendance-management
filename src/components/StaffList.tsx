@@ -1,674 +1,327 @@
-import { useQuery, useMutation } from "convex/react";
+import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { api } from "../../convex/_generated/api";
-import { useState } from "react";
 import { toast } from "sonner";
-import { Id } from "../../convex/_generated/dataModel";
-import { StaffDetail } from "./StaffDetail";
-import { TagInput } from "./TagInput";
-
-import QRCode from "qrcode";
-import jsPDF from "jspdf";
 
 interface StaffListProps {
+  onStaffSelect: (staffId: string) => void;
   isPremium: boolean;
 }
 
-export function StaffList({ isPremium }: StaffListProps) {
+export function StaffList({ onStaffSelect, isPremium }: StaffListProps) {
   const { user } = useUser();
   const clerkUserId = user?.id;
   
-  const staffList = useQuery(api.staff.getStaffList, clerkUserId ? { clerkUserId } : "skip");
-  const inactiveStaffList = useQuery(api.staff.getInactiveStaffList, clerkUserId ? { clerkUserId } : "skip");
-  const allUsedTags = useQuery(api.staff.getAllUsedTags, clerkUserId ? { clerkUserId } : "skip");
-
-  const createAttendanceDummyData = useMutation(api.attendance.createAttendanceDummyData);
-  const createStaff = useMutation(api.staff.createStaff);
-  const updateStaff = useMutation(api.staff.updateStaff);
-  const deactivateStaff = useMutation(api.staff.deactivateStaff);
-  const reactivateStaff = useMutation(api.staff.reactivateStaff);
+  // TODO: Supabaseクエリでデータを取得
+  const staffList = [
+    { _id: '1', name: 'サンプル太郎', qrCodeData: 'sample1', tags: ['正社員'], isActive: true },
+    { _id: '2', name: 'テスト花子', qrCodeData: 'sample2', tags: ['パート'], isActive: true }
+  ];
   
-  const [selectedStaff, setSelectedStaff] = useState<Id<"staff">[]>([]);
-  const [selectedInactiveStaff, setSelectedInactiveStaff] = useState<Id<"staff">[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showInactiveList, setShowInactiveList] = useState(false);
-  const [editingStaffId, setEditingStaffId] = useState<Id<"staff"> | null>(null);
-  const [viewingStaffId, setViewingStaffId] = useState<Id<"staff"> | null>(null);
-  const [showBulkTagModal, setShowBulkTagModal] = useState(false);
-  const [bulkTags, setBulkTags] = useState<string[]>([]);
+  const inactiveStaffList: any[] = [];
+  const allUsedTags = ['正社員', 'パート', 'アルバイト'];
+  
+  const [showInactive, setShowInactive] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<any>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [formData, setFormData] = useState({
     name: "",
+    qrCodeData: "",
     tags: [] as string[],
   });
 
-
-  if (staffList === undefined || inactiveStaffList === undefined) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedStaff(staffList.map(staff => staff._id));
-    } else {
-      setSelectedStaff([]);
-    }
-  };
-
-  const handleSelectStaff = (staffId: Id<"staff">, checked: boolean) => {
-    if (checked) {
-      setSelectedStaff([...selectedStaff, staffId]);
-    } else {
-      setSelectedStaff(selectedStaff.filter(id => id !== staffId));
-    }
-  };
-
-  const handleSelectAllInactive = (checked: boolean) => {
-    if (checked) {
-      setSelectedInactiveStaff(inactiveStaffList.map(staff => staff._id));
-    } else {
-      setSelectedInactiveStaff([]);
-    }
-  };
-
-  const handleSelectInactiveStaff = (staffId: Id<"staff">, checked: boolean) => {
-    if (checked) {
-      setSelectedInactiveStaff([...selectedInactiveStaff, staffId]);
-    } else {
-      setSelectedInactiveStaff(selectedInactiveStaff.filter(id => id !== staffId));
-    }
-  };
-
-  const handleCreateDummyData = async () => {
-    try {
-      await createAttendanceDummyData(clerkUserId ? { clerkUserId } : {});
-      toast.success("ダミーデータを作成しました");
-    } catch {
-      toast.error("エラーが発生しました");
-    }
-  };
-
-  const handleDeactivateSelected = async () => {
-    if (selectedStaff.length === 0) return;
-    
-    try {
-      await deactivateStaff({ 
-        staffIds: selectedStaff,
-        clerkUserId: clerkUserId,
-      });
-      toast.success(`${selectedStaff.length}名のスタッフを無効化しました`);
-      setSelectedStaff([]);
-    } catch {
-      toast.error("エラーが発生しました");
-    }
-  };
-
-  const handleReactivateSelected = async () => {
-    if (selectedInactiveStaff.length === 0) return;
-    
-    try {
-      await reactivateStaff({ 
-        staffIds: selectedInactiveStaff,
-        clerkUserId: clerkUserId,
-      });
-      toast.success(`${selectedInactiveStaff.length}名のスタッフを有効化しました`);
-      setSelectedInactiveStaff([]);
-    } catch {
-      toast.error("エラーが発生しました");
-    }
-  };
-
-  const handleQRCode = async (staffIds: Id<"staff">[]) => {
-    const allStaff = [...staffList, ...inactiveStaffList];
-    const data = allStaff.filter(s => staffIds.includes(s._id));
-    const pdf = new jsPDF();
-    
-    // 名刺サイズ: 55mm × 91mm
-    const cardWidth = 91; // mm
-    const cardHeight = 55; // mm
-    const margin = 5; // mm
-    
-    // A4サイズでの配置計算
-    const pageWidth = 210; // A4幅
-    const pageHeight = 297; // A4高さ
-    const cardsPerRow = Math.floor((pageWidth - margin) / (cardWidth + margin));
-    const cardsPerCol = Math.floor((pageHeight - margin) / (cardHeight + margin));
-    const cardsPerPage = cardsPerRow * cardsPerCol;
-    
-    for (let i = 0; i < data.length; i++) {
-      const staff = data[i];
-      
-      // 新しいページが必要かチェック
-      if (i > 0 && i % cardsPerPage === 0) {
-        pdf.addPage();
-      }
-      
-      const cardIndex = i % cardsPerPage;
-      const col = cardIndex % cardsPerRow;
-      const row = Math.floor(cardIndex / cardsPerRow);
-      
-      const x = margin + col * (cardWidth + margin);
-      const y = margin + row * (cardHeight + margin);
-      
-      // QRコード生成
-      const qr = await QRCode.toDataURL(staff.qrCode || staff.employeeId, { 
-        width: 200,
-        margin: 1
-      });
-      
-      // カード枠
-      pdf.rect(x, y, cardWidth, cardHeight);
-      
-      // QRコード配置（中央）
-      const qrSize = 35; // mm
-      const qrX = x + (cardWidth - qrSize) / 2;
-      const qrY = y + 5;
-      pdf.addImage(qr, 'PNG', qrX, qrY, qrSize, qrSize);
-      
-      // 職員番号のみ表示（QRコードの下）
-      pdf.setFontSize(8);
-      pdf.text(staff.employeeId, x + cardWidth / 2, y + qrSize + 12, { align: 'center' });
-    }
-    
-    pdf.save(data.length === 1 ? `${data[0].employeeId}_QRコード.pdf` : `QRコード_${data.length}名分.pdf`);
-    toast.success("QRコードPDFを生成しました");
-  };
-
-  const handleTagsChange = (tags: string[]) => {
+  const resetForm = () => {
     setFormData({
-      ...formData,
-      tags,
+      name: "",
+      qrCodeData: "",
+      tags: [],
     });
+    setShowAddForm(false);
+    setEditingStaff(null);
   };
 
-  const handleSingleReactivate = async (staffId: Id<"staff">) => {
-    try {
-      await reactivateStaff({ 
-        staffIds: [staffId],
-        clerkUserId: clerkUserId,
-      });
-      toast.success("スタッフを有効化しました");
-    } catch {
-      toast.error("エラーが発生しました");
-    }
-  };
-
-  const handleBulkTagEdit = () => {
-    if (selectedStaff.length === 0) return;
-    setShowBulkTagModal(true);
-  };
-
-  const handleBulkTagSave = async () => {
-    if (selectedStaff.length === 0) return;
-    
-    try {
-      for (const staffId of selectedStaff) {
-        const staff = staffList?.find(s => s._id === staffId);
-        if (staff) {
-          await updateStaff({
-            staffId,
-            name: staff.name,
-            tags: bulkTags.length > 0 ? bulkTags : undefined,
-            clerkUserId: clerkUserId,
-          });
-        }
-      }
-      toast.success(`${selectedStaff.length}名のスタッフのタグを更新しました`);
-      setShowBulkTagModal(false);
-      setBulkTags([]);
-      setSelectedStaff([]);
-    } catch {
-      toast.error("エラーが発生しました");
-    }
-  };
-
-
-
-  const handleSubmitStaff = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
-      toast.error("氏名は必須です");
+      toast.error("スタッフ名を入力してください");
       return;
     }
 
-    try {
-      await createStaff({
-        name: formData.name.trim(),
-        tags: formData.tags.length > 0 ? formData.tags : undefined,
-        clerkUserId: clerkUserId,
-      });
-      
-      toast.success("スタッフを追加しました");
-      setShowAddModal(false);
-      setFormData({ name: "", tags: [] });
-    } catch {
-      toast.error("エラーが発生しました");
+    if (!formData.qrCodeData.trim()) {
+      toast.error("QRコードデータを入力してください");
+      return;
     }
+
+    // TODO: Supabaseでの保存処理
+    console.log('TODO: Supabaseに保存', formData);
+    toast.success(editingStaff ? "スタッフ情報を更新しました" : "スタッフを登録しました");
+    resetForm();
   };
 
-  const closeModal = () => {
-    setShowAddModal(false);
-    setFormData({ name: "", tags: [] });
-  };
-
-  const closeEditModal = () => {
-    setShowEditModal(false);
-    setEditingStaffId(null);
-    setFormData({ name: "", tags: [] });
-  };
-
-  const openEditModal = (staff: any) => {
-    setEditingStaffId(staff._id);
+  const handleEdit = (staff: any) => {
     setFormData({
       name: staff.name,
+      qrCodeData: staff.qrCodeData,
       tags: staff.tags || [],
     });
-    setShowEditModal(true);
+    setEditingStaff(staff);
+    setShowAddForm(true);
   };
 
-  const handleUpdateStaff = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDeactivate = (staffId: string) => {
+    if (!confirm("このスタッフを無効にしますか？")) return;
     
-    if (!formData.name.trim() || !editingStaffId) {
-      toast.error("氏名は必須です");
-      return;
-    }
-
-    try {
-      await updateStaff({
-        staffId: editingStaffId,
-        name: formData.name.trim(),
-        tags: formData.tags.length > 0 ? formData.tags : undefined,
-        clerkUserId: clerkUserId,
-      });
-      
-      toast.success("スタッフ情報を更新しました");
-      closeEditModal();
-    } catch {
-      toast.error("エラーが発生しました");
-    }
+    // TODO: Supabaseでの無効化処理
+    console.log('TODO: Supabaseで無効化', staffId);
+    toast.success("スタッフを無効にしました");
   };
 
-  if (viewingStaffId) {
-    return (
-      <StaffDetail 
-        staffId={viewingStaffId} 
-        onBack={() => setViewingStaffId(null)}
-        isPremium={isPremium}
-      />
-    );
-  }
+  const handleReactivate = (staffId: string) => {
+    // TODO: Supabaseでの有効化処理
+    console.log('TODO: Supabaseで有効化', staffId);
+    toast.success("スタッフを有効にしました");
+  };
+
+  const filteredStaff = staffList.filter(staff => {
+    const matchesSearch = staff.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTags = selectedTags.length === 0 || 
+      selectedTags.some(tag => staff.tags?.includes(tag));
+    return matchesSearch && matchesTags;
+  });
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">スタッフ一覧</h1>
-        <div className="flex gap-2">
-          {staffList.length === 0 && (
-            <button
-              onClick={() => void handleCreateDummyData()}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              ダミーデータ作成
-            </button>
-          )}
-          <button
-            onClick={() => setShowInactiveList(!showInactiveList)}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            {showInactiveList ? "有効スタッフ表示" : "無効スタッフ表示"}
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            新規スタッフ追加
-          </button>
+        <h1 className="text-2xl font-bold text-gray-900">スタッフ管理</h1>
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          新しいスタッフを追加
+        </button>
+      </div>
+
+      {/* 移行作業中の通知 */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 text-yellow-800">
+          <span className="text-2xl">🚧</span>
+          <div>
+            <p className="font-medium">移行作業中</p>
+            <p className="text-sm">スタッフ管理機能はSupabase移行後に完全実装されます。現在はデモ表示中です。</p>
+          </div>
         </div>
       </div>
 
-      {/* 新規追加モーダル */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">新規スタッフ追加</h2>
+      {/* 検索・フィルター */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              スタッフ名で検索
+            </label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="スタッフ名を入力..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              タグでフィルター
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {allUsedTags.map((tag) => (
                 <button
-                  onClick={closeModal}
-                  className="text-gray-400 hover:text-gray-600 text-xl"
+                  key={tag}
+                  onClick={() => {
+                    setSelectedTags(prev => 
+                      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                    );
+                  }}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                    selectedTags.includes(tag)
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
                 >
-                  ✕
+                  {tag}
                 </button>
-              </div>
-              
-              <form onSubmit={(e) => void handleSubmitStaff(e)} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    氏名 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="田中 太郎"
-                    required
-                  />
-                </div>
-
-                <TagInput
-                  tags={formData.tags}
-                  onTagsChange={handleTagsChange}
-                  availableTags={allUsedTags || []}
-                />
-
-                <div className="flex gap-2 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    追加
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    キャンセル
-                  </button>
-                </div>
-              </form>
+              ))}
             </div>
           </div>
         </div>
-      )}
-
-      {/* 編集モーダル */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">スタッフ情報編集</h2>
-                <button
-                  onClick={closeEditModal}
-                  className="text-gray-400 hover:text-gray-600 text-xl"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              <form onSubmit={(e) => void handleUpdateStaff(e)} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    氏名 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="田中 太郎"
-                    required
-                  />
-                </div>
-
-                <TagInput
-                  tags={formData.tags}
-                  onTagsChange={handleTagsChange}
-                  availableTags={allUsedTags || []}
-                />
-
-
-
-                <div className="flex gap-2 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    更新
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeEditModal}
-                    className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    キャンセル
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 一括操作バー */}
-      {!showInactiveList && selectedStaff.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex justify-between items-center">
-            <span className="text-blue-800 font-medium">
-              {selectedStaff.length}名のスタッフが選択されています
-            </span>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => void handleQRCode(selectedStaff)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                QRコード一括印刷
-              </button>
-              <button
-                onClick={handleBulkTagEdit}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-              >
-                タグ一括編集
-              </button>
-              <button
-                onClick={() => void handleDeactivateSelected()}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-              >
-                一括無効化
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 無効スタッフの一括操作バー */}
-      {showInactiveList && selectedInactiveStaff.length > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex justify-between items-center">
-            <span className="text-green-800 font-medium">
-              {selectedInactiveStaff.length}名の無効スタッフが選択されています
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => void handleReactivateSelected()}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-              >
-                一括有効化
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* バルクタグ編集モーダル */}
-      {showBulkTagModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h2 className="text-lg font-semibold mb-4">タグ一括編集 ({selectedStaff.length}名)</h2>
-            <TagInput tags={bulkTags} onTagsChange={setBulkTags} availableTags={allUsedTags || []} />
-            <div className="flex gap-2 pt-4">
-              <button onClick={() => void handleBulkTagSave()} className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg">
-                適用
-              </button>
-              <button onClick={() => setShowBulkTagModal(false)} className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg">
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* スタッフリスト */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-4">
-            <input
-              type="checkbox"
-              checked={
-                showInactiveList 
-                  ? selectedInactiveStaff.length === inactiveStaffList.length && inactiveStaffList.length > 0
-                  : selectedStaff.length === staffList.length && staffList.length > 0
-              }
-              onChange={(e) => showInactiveList ? handleSelectAllInactive(e.target.checked) : handleSelectAll(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            <h2 className="text-lg font-semibold text-gray-900">
-              {showInactiveList 
-                ? `無効スタッフ一覧 (${inactiveStaffList.length}名)`
-                : `有効スタッフ一覧 (${staffList.length}名)`
-              }
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="p-4 border-b">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">
+              アクティブなスタッフ ({filteredStaff.length}名)
             </h2>
+            <button
+              onClick={() => setShowInactive(!showInactive)}
+              className="text-gray-600 hover:text-gray-800 text-sm"
+            >
+              {showInactive ? "非アクティブを非表示" : "非アクティブを表示"}
+            </button>
           </div>
         </div>
-        
-        <div className="divide-y divide-gray-200">
-          {showInactiveList ? (
-            inactiveStaffList.length === 0 ? (
-              <div className="text-center py-12">
-                <span className="text-gray-400 text-4xl">🗂️</span>
-                <p className="text-gray-500 mt-4">無効化されたスタッフはいません</p>
-              </div>
-            ) : (
-              inactiveStaffList.map((staff) => (
-                <div key={staff._id} className="p-6 hover:bg-gray-50 transition-colors bg-gray-50">
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedInactiveStaff.includes(staff._id)}
-                      onChange={(e) => handleSelectInactiveStaff(staff._id, e.target.checked)}
-                      className="rounded border-gray-300"
-                    />
-                    
-                    <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                      <span className="text-gray-500 font-semibold text-lg">
-                        {staff.name.charAt(0)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <h3 className="text-lg font-medium text-gray-600">{staff.name}</h3>
-                        <span className="text-sm text-gray-500">ID: {staff.employeeId}</span>
-                        <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">無効</span>
-                      </div>
-                      
-                      {staff.tags && staff.tags.length > 0 && (
-                        <div className="mt-2 flex gap-1">
-                          {staff.tags.map((tag, index) => (
-                            <span
-                              key={index}
-                              className="inline-block bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => void handleSingleReactivate(staff._id)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        有効化
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )
+
+        <div className="p-4">
+          {filteredStaff.length === 0 ? (
+            <div className="text-center py-8">
+              <span className="text-gray-400 text-4xl">👥</span>
+              <p className="text-gray-500 mt-4">条件に一致するスタッフが見つかりません</p>
+            </div>
           ) : (
-            staffList.length === 0 ? (
-              <div className="text-center py-12">
-                <span className="text-gray-400 text-4xl">👥</span>
-                <p className="text-gray-500 mt-4">登録されているスタッフがありません</p>
-                <p className="text-gray-400 text-sm mt-2">
-                  「ダミーデータ作成」ボタンでサンプルデータを作成できます
-                </p>
-              </div>
-            ) : (
-              staffList.map((staff) => (
-                <div key={staff._id} className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedStaff.includes(staff._id)}
-                      onChange={(e) => handleSelectStaff(staff._id, e.target.checked)}
-                      className="rounded border-gray-300"
-                    />
-                    
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-blue-600 font-semibold text-lg">
-                        {staff.name.charAt(0)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <h3 className="text-lg font-medium text-gray-900">{staff.name}</h3>
-                        <span className="text-sm text-gray-500">ID: {staff.employeeId}</span>
-                      </div>
-                      
-                      {staff.tags && staff.tags.length > 0 && (
-                        <div className="mt-2 flex gap-1">
-                          {staff.tags.map((tag, index) => (
-                            <span
-                              key={index}
-                              className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => setViewingStaffId(staff._id)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        詳細
-                      </button>
-                      <button 
-                        onClick={() => void handleQRCode([staff._id])}
-                        className="text-green-600 hover:text-green-800 text-sm font-medium"
-                      >
-                        QRコード
-                      </button>
-                      <button 
-                        onClick={() => openEditModal(staff)}
-                        className="text-gray-600 hover:text-gray-800 text-sm font-medium"
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredStaff.map((staff) => (
+                <div key={staff._id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-gray-900">{staff.name}</h3>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleEdit(staff)}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
                       >
                         編集
                       </button>
+                      <button
+                        onClick={() => onStaffSelect(staff._id)}
+                        className="text-green-600 hover:text-green-800 text-sm ml-2"
+                      >
+                        詳細
+                      </button>
                     </div>
                   </div>
+                  <p className="text-sm text-gray-600 mb-2">QR: {staff.qrCodeData}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {staff.tags?.map((tag: string) => (
+                      <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              ))
-            )
+              ))}
+            </div>
           )}
         </div>
       </div>
+
+      {/* 非アクティブなスタッフ */}
+      {showInactive && inactiveStaffList.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold text-gray-600">
+              非アクティブなスタッフ ({inactiveStaffList.length}名)
+            </h2>
+          </div>
+          <div className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {inactiveStaffList.map((staff) => (
+                <div key={staff._id} className="border rounded-lg p-4 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-gray-600">{staff.name}</h3>
+                    <button
+                      onClick={() => handleReactivate(staff._id)}
+                      className="text-green-600 hover:text-green-800 text-sm"
+                    >
+                      有効化
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-2">QR: {staff.qrCodeData}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {staff.tags?.map((tag: string) => (
+                      <span key={tag} className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 追加・編集フォーム */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {editingStaff ? "スタッフ情報を編集" : "新しいスタッフを追加"}
+                </h2>
+                <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 text-xl">
+                  ✕
+                </button>
+              </div>
+              
+                             <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    スタッフ名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="山田太郎"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    QRコードデータ <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.qrCodeData}
+                    onChange={(e) => setFormData({ ...formData, qrCodeData: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="staff_001"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    QRコードに含まれる識別子（英数字、アンダースコア、ハイフンのみ）
+                  </p>
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800">
+                    <strong>移行作業中:</strong> 実際の保存機能はSupabase移行後に実装されます。
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    {editingStaff ? "更新（デモ）" : "追加（デモ）"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="flex-1 bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

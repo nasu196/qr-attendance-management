@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useAction } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import { marked } from "marked";
 
 interface AIChatProps {
@@ -11,15 +9,13 @@ export function AIChat({ isPremium }: AIChatProps) {
   const [messages, setMessages] = useState<Array<{ id: string; text: string; isUser: boolean; timestamp: Date }>>([
     {
       id: "welcome",
-      text: "こんにちは！勤怠管理システムのAIアシスタントです。スタッフの追加や削除、設定変更などお手伝いします。何かお困りですか？",
+      text: "こんにちは！勤怠管理システムのAIアシスタントです。現在Supabase移行作業中のため、一時的に機能が制限されています。移行完了後に全機能をご利用いただけます。",
       isUser: false,
       timestamp: new Date()
     }
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  const generateChatResponse = useAction(api.aiChat.generateChatResponse);
 
   // マークダウンをHTMLに変換する関数
   const parseMarkdown = (text: string) => {
@@ -51,20 +47,12 @@ export function AIChat({ isPremium }: AIChatProps) {
     setIsLoading(true);
 
     try {
-      // 会話履歴を構築（最新10件のみ）
-      const conversationHistory = messages.slice(-10).map(msg => ({
-        role: msg.isUser ? "user" : "assistant",
-        content: msg.text
-      }));
-
-      const result = await generateChatResponse({
-        message: messageText,
-        conversationHistory
-      });
-
+      // TODO: Supabase移行後に実装
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 模擬遅延
+      
       const aiResponse = {
         id: `ai-${Date.now()}`,
-        text: result.success ? result.response! : `エラー: ${result.error}`,
+        text: `申し訳ございませんが、現在システム移行作業中のため、AIアシスタント機能は一時的に利用できません。\n\n「${messageText}」についてのご質問は、移行完了後にお答えいたします。\n\n**実装予定機能:**\n- スタッフ管理サポート\n- 勤怠記録の説明\n- システム操作ガイド\n- トラブルシューティング`,
         isUser: false,
         timestamp: new Date()
       };
@@ -100,6 +88,11 @@ export function AIChat({ isPremium }: AIChatProps) {
             <h3 className="font-semibold text-gray-900">AIアシスタント</h3>
             <p className="text-xs text-gray-600">勤怠管理をサポート</p>
           </div>
+          <div className="ml-auto">
+            <div className="bg-yellow-100 text-yellow-600 px-2 py-1 rounded-full text-xs font-medium">
+              移行作業中
+            </div>
+          </div>
         </div>
       </div>
 
@@ -123,12 +116,12 @@ export function AIChat({ isPremium }: AIChatProps) {
                   <p>{message.text}</p>
                 ) : (
                   // AIメッセージはマークダウンとしてレンダリング
-                                     <div
-                     className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-strong:font-bold prose-code:text-gray-800 prose-code:bg-gray-200 prose-code:px-1 prose-code:rounded prose-headings:text-gray-900 prose-headings:font-semibold"
-                     dangerouslySetInnerHTML={{
-                       __html: parseMarkdown(message.text)
-                     }}
-                   />
+                  <div
+                    className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-strong:font-bold prose-code:text-gray-800 prose-code:bg-gray-200 prose-code:px-1 prose-code:rounded prose-headings:text-gray-900 prose-headings:font-semibold"
+                    dangerouslySetInnerHTML={{
+                      __html: parseMarkdown(message.text)
+                    }}
+                  />
                 )}
               </div>
               <p className={`text-xs mt-1 ${
@@ -163,7 +156,7 @@ export function AIChat({ isPremium }: AIChatProps) {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="メッセージを入力してください..."
+            placeholder="メッセージを入力してください（移行作業中）..."
             className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             rows={2}
             disabled={isLoading}
@@ -177,7 +170,7 @@ export function AIChat({ isPremium }: AIChatProps) {
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          Enter: 送信 | Shift+Enter: 改行
+          Enter: 送信 | Shift+Enter: 改行 | ※移行作業中につき機能制限中
         </p>
       </div>
     </div>
